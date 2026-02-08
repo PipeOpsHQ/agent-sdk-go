@@ -22,7 +22,6 @@ import (
 	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog/sqlite"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
 	basicgraph "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/secops"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
