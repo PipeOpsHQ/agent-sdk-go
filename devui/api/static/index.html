@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Agent Framework DevUI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>AI Agent Framework DevUI</h1>
+      <p>Observability, runtime ops, and tool management</p>
+    </header>
+    <nav>
+      <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="runtime">Runtime</button>
+      <button data-tab="runs">Runs</button>
+      <button data-tab="tools">Tools</button>
+      <button data-tab="workflows">Workflows</button>
+      <button data-tab="admin">Admin</button>
+    </nav>
+    <main>
+      <section id="tab-dashboard" class="tab active">
+        <h2>Metrics</h2>
+        <pre id="metrics"></pre>
+      </section>
+
+      <section id="tab-runtime" class="tab">
+        <h2>Distributed Runtime</h2>
+        <div class="actions">
+          <button id="refreshRuntime">Refresh Runtime</button>
+        </div>
+        <h3>Queue</h3>
+        <pre id="runtimeQueue"></pre>
+        <h3>Workers</h3>
+        <pre id="runtimeWorkers"></pre>
+        <h3>DLQ</h3>
+        <pre id="runtimeDLQ"></pre>
+      </section>
+
+      <section id="tab-runs" class="tab">
+        <h2>Runs</h2>
+        <div class="split">
+          <div>
+            <button id="refreshRuns">Refresh Runs</button>
+            <ul id="runsList"></ul>
+          </div>
+          <div>
+            <h3>Run Detail</h3>
+            <pre id="runDetail"></pre>
+            <h3>Timeline</h3>
+            <pre id="runEvents"></pre>
+            <h3>Checkpoints</h3>
+            <pre id="runCheckpoints"></pre>
+            <h3>Attempts</h3>
+            <pre id="runAttempts"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-tools" class="tab">
+        <h2>Catalog</h2>
+        <button id="refreshTools">Refresh Catalog</button>
+        <h3>Templates</h3>
+        <pre id="toolTemplates"></pre>
+        <h3>Instances</h3>
+        <pre id="toolInstances"></pre>
+        <h3>Bundles</h3>
+        <pre id="toolBundles"></pre>
+        <h3>Integration Providers</h3>
+        <pre id="integrationProviders"></pre>
+      </section>
+
+      <section id="tab-workflows" class="tab">
+        <h2>Workflow Bindings</h2>
+        <button id="refreshWorkflows">Refresh Bindings</button>
+        <pre id="workflowBindings"></pre>
+      </section>
+
+      <section id="tab-admin" class="tab">
+        <h2>Auth Keys</h2>
+        <button id="refreshKeys">Refresh Keys</button>
+        <pre id="authKeys"></pre>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
