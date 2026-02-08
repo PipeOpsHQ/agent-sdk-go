@@ -115,13 +115,13 @@ func runDevUI() {
 		Description:  "Quickstart demo: single agent run + 3-node graph (prepare→agent→finalize). Answers security questions with tool support.",
 		Tools:        []string{"@default"},
 		SystemPrompt: "You are concise and practical.",
-		InputExample: "Explain zero trust in 3 bullets.",
+		InputExample: "Compare symmetric vs asymmetric encryption — when to use each, with real-world examples.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"input": map[string]any{
 					"type":        "string",
-					"description": "Security topic or question to answer.",
+					"description": "Security topic or question to research and answer.",
 				},
 			},
 			"required": []string{"input"},

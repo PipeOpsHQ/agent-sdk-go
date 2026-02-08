@@ -1582,6 +1582,7 @@ async function sendPlaygroundMessage() {
 
   appendChatMessage('user', prompt);
   input.value = '';
+  input.style.height = 'auto';
   sendBtn.disabled = true;
 
   const payload = {
@@ -1742,6 +1743,11 @@ async function streamPlaygroundRun(payload, progressEl) {
   return finalResponse;
 }
 
+function autoResizeTextarea(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
 function initPlayground() {
   const sendBtn = document.getElementById('sendMessage');
   const input = document.getElementById('chatInput');
@@ -1752,6 +1758,7 @@ function initPlayground() {
       sendPlaygroundMessage();
     }
   });
+  input?.addEventListener('input', () => autoResizeTextarea(input));
 
   // JSON payload mode
   const jsonSendBtn = document.getElementById('sendJsonPayload');

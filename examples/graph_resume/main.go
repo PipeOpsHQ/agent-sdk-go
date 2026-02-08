@@ -92,13 +92,19 @@ func runDevUI() {
 		Name:         "graph-resume",
 		Description:  "Demonstrates graph execution with prepare→analyze→finalize nodes and run resume capability.",
 		SystemPrompt: "You analyze security incidents and prepare triage reports.",
-		InputExample: "critical vulns found in payment-service",
+		InputExample: "Unauthorized access detected on checkout-api — investigate and triage",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"input": map[string]any{
 					"type":        "string",
-					"description": "Incident description to process through the graph pipeline.",
+					"description": "Security incident description to process through the graph pipeline.",
+				},
+				"priority": map[string]any{
+					"type":        "string",
+					"description": "Incident priority level.",
+					"enum":        []string{"P1", "P2", "P3", "P4"},
+					"default":     "P2",
 				},
 			},
 			"required": []string{"input"},

@@ -52,13 +52,13 @@ func runDevUI() {
 		Name:         "minimal-agent",
 		Description:  "Concise, practical, security-focused assistant. Answers general security questions.",
 		SystemPrompt: "You are concise, practical, and security-focused.",
-		InputExample: "Explain defense in depth in 4 bullets.",
+		InputExample: "What are the OWASP Top 10 risks? Explain each in one sentence.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"input": map[string]any{
 					"type":        "string",
-					"description": "A security question or prompt.",
+					"description": "A security topic, question, or concept to explain.",
 				},
 			},
 			"required": []string{"input"},

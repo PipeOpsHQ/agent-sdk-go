@@ -119,20 +119,27 @@ func runDevUI() {
 		Description: "Analyzes application logs, identifies issues by severity, suggests root causes and actionable fixes.",
 		Tools:       []string{"file_system", "code_search", "shell_command", "@default"},
 		SystemPrompt: logAnalyzerPrompt,
-		InputExample: `2026-02-08 10:23:45 ERROR NullPointerException in UserService.java:142
-2026-02-08 10:23:46 WARN Connection pool exhausted, waiting for available connection
-2026-02-08 10:23:47 ERROR Failed to process payment: timeout after 30s`,
+		InputExample: `2026-02-08 10:23:45 ERROR NullPointerException in UserService.java:142 - Cannot invoke method on null reference
+2026-02-08 10:23:46 WARN  HikariPool-1: Connection pool exhausted (active=50, idle=0, waiting=23)
+2026-02-08 10:23:47 ERROR PaymentGateway.process() timeout after 30s — retries exhausted (3/3)
+2026-02-08 10:23:48 INFO  HealthCheck: database=OK, cache=DEGRADED, queue=OK
+2026-02-08 10:23:49 ERROR CircuitBreaker OPEN for payment-service: 15 failures in last 60s`,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"input": map[string]any{
 					"type":        "string",
-					"description": "Log entries to analyze (paste raw log text).",
+					"description": "Raw log entries to analyze — paste application, system, or access logs.",
 				},
 				"severity_filter": map[string]any{
 					"type":        "string",
-					"description": "Minimum severity to report.",
+					"description": "Minimum severity level to include in analysis.",
 					"enum":        []string{"all", "low", "medium", "high", "critical"},
+					"default":     "all",
+				},
+				"context": map[string]any{
+					"type":        "string",
+					"description": "Additional context about the service or incident (optional).",
 				},
 			},
 			"required": []string{"input"},

@@ -1935,6 +1935,10 @@ body {
   resize: none;
   outline: none;
   font-family: inherit;
+  min-height: 44px;
+  max-height: 200px;
+  overflow-y: auto;
+  transition: height 0.1s ease;
 }
 
 .chat-input:focus {

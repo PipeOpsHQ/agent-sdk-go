@@ -156,13 +156,19 @@ func runDevUI() {
 		Description: "SecOps agent that analyzes Trivy vulnerability reports and application logs, returning compact actionable findings.",
 		Tools:       []string{"@default", "@security"},
 		SystemPrompt: secOpsSystemPrompt,
-		InputExample: `{"ArtifactName":"myapp:latest","Results":[{"Vulnerabilities":[{"VulnerabilityID":"CVE-2024-1234","PkgName":"openssl","InstalledVersion":"1.1.1","FixedVersion":"1.1.1w","Severity":"CRITICAL","Title":"Buffer overflow in X.509 parsing"}]}]}`,
+		InputExample: "Scan payment-service for critical CVEs, summarize top 5 findings with remediation steps",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"input": map[string]any{
 					"type":        "string",
-					"description": "Trivy JSON report or raw application log text to analyze.",
+					"description": "Trivy JSON report, raw log text, or natural language description of vulnerabilities to analyze.",
+				},
+				"scope": map[string]any{
+					"type":        "string",
+					"description": "Analysis scope — focus area for the scan.",
+					"enum":        []string{"all", "critical-only", "fixable-only", "runtime"},
+					"default":     "all",
 				},
 			},
 			"required": []string{"input"},

@@ -110,7 +110,7 @@ func main() {
 		agentfw.WithMaxIterations(15),
 		agentfw.WithMaxOutputTokens(4000),
 		agentfw.WithParallelToolCalls(true),
-		agentfw.WithMaxParallelTools(10),
+		agentfw.WithMaxParallelTools(100),
 		agentfw.WithRetryPolicy(agentfw.RetryPolicy{
 			MaxAttempts: 3,
 			BaseBackoff: 500 * time.Millisecond,
@@ -146,13 +146,13 @@ func runDevUI() {
 		Description:  "Full-stack DevOps agent with all 33 tools: code analysis, HTTP/web, shell/files, Docker, Kubernetes, encoding, security, memory, DNS, process/disk/system info, archives, logs, and cron scheduling.",
 		Tools:        []string{"@all"},
 		SystemPrompt: systemPrompt,
-		InputExample: "Generate a UUID, hash it with SHA256, base64-encode the hash, and store the result in memory under key 'demo'",
+		InputExample: "Generate a UUID, hash it with SHA256, base64-encode the result, then curl https://httpbin.org/post with the encoded value as the body",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"input": map[string]any{
 					"type":        "string",
-					"description": "Task or question for the DevOps agent. Can involve any combination of tools.",
+					"description": "Multi-step task description — the agent chains tools automatically.",
 				},
 			},
 			"required": []string{"input"},

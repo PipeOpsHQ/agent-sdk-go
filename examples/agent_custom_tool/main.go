@@ -100,13 +100,13 @@ func runDevUI() {
 		Description:  "Agent with custom calculate_risk_score tool. Computes risk tiers from vulnerability counts and gives remediation advice.",
 		Tools:        []string{"calculate_risk_score"},
 		SystemPrompt: "Use tools when available and return compact security recommendations.",
-		InputExample: "Use calculate_risk_score with critical=2, high=4, medium=3. Return: score, tier, and top 3 immediate remediation priorities.",
+		InputExample: "Run calculate_risk_score with critical=3, high=7, medium=12, low=45. Then give me the risk tier, overall score, and a prioritized 5-step remediation plan.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"input": map[string]any{
 					"type":        "string",
-					"description": "Prompt describing vulnerability counts to score and analyze.",
+					"description": "Vulnerability counts and context for risk scoring — include critical, high, medium, low counts.",
 				},
 			},
 			"required": []string{"input"},
