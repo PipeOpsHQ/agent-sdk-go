@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
 )
@@ -24,6 +27,11 @@ type riskOutput struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && strings.ToLower(os.Args[1]) == "ui" {
+		runDevUI()
+		return
+	}
+
 	ctx := context.Background()
 	provider, err := providerfactory.FromEnv(ctx)
 	if err != nil {
@@ -84,4 +92,28 @@ func main() {
 
 	fmt.Printf("run_id=%s session_id=%s\n\n", result.RunID, result.SessionID)
 	fmt.Println(result.Output)
+}
+
+func runDevUI() {
+	flow.MustRegister(&flow.Definition{
+		Name:         "risk-scorer",
+		Description:  "Agent with custom calculate_risk_score tool. Computes risk tiers from vulnerability counts and gives remediation advice.",
+		Tools:        []string{"calculate_risk_score"},
+		SystemPrompt: "Use tools when available and return compact security recommendations.",
+		InputExample: "Use calculate_risk_score with critical=2, high=4, medium=3. Return: score, tier, and top 3 immediate remediation priorities.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"input": map[string]any{
+					"type":        "string",
+					"description": "Prompt describing vulnerability counts to score and analyze.",
+				},
+			},
+			"required": []string{"input"},
+		},
+	})
+
+	if err := devui.Start(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }

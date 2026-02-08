@@ -1430,11 +1430,38 @@ function initCommandBar() {
 let currentInputMode = 'chat';
 
 function setInputMode(mode) {
-  currentInputMode = mode;
   const chatMode = document.getElementById('playgroundChatMode');
   const jsonMode = document.getElementById('playgroundJsonMode');
   const chatBtn = document.getElementById('modeChatBtn');
   const jsonBtn = document.getElementById('modeJsonBtn');
+  const chatInput = document.getElementById('chatInput');
+  const jsonInput = document.getElementById('jsonPayloadInput');
+
+  // Persist input across mode switches
+  if (mode === 'json' && currentInputMode === 'chat') {
+    const text = chatInput?.value?.trim() || '';
+    if (text && jsonInput) {
+      try {
+        JSON.parse(text);
+        jsonInput.value = text;
+      } catch (_) {
+        jsonInput.value = JSON.stringify({ input: text }, null, 2);
+      }
+      validateJsonInput();
+    }
+  } else if (mode === 'chat' && currentInputMode === 'json') {
+    const raw = jsonInput?.value?.trim() || '';
+    if (raw && chatInput) {
+      try {
+        const obj = JSON.parse(raw);
+        chatInput.value = typeof obj.input === 'string' ? obj.input : raw;
+      } catch (_) {
+        chatInput.value = raw;
+      }
+    }
+  }
+
+  currentInputMode = mode;
   if (mode === 'json') {
     chatMode && (chatMode.style.display = 'none');
     jsonMode && (jsonMode.style.display = 'block');
@@ -2262,6 +2289,27 @@ function setActionInputMode(mode) {
   const jsonBtn = document.getElementById('actionJsonModeBtn');
   const formFields = document.getElementById('actionFormFields');
   const jsonEditor = document.getElementById('actionJsonEditor');
+  const jsonInput = document.getElementById('actionJsonInput');
+
+  // Persist input across mode switches
+  if (mode === 'json' && formFields && formFields.style.display !== 'none') {
+    const formData = collectFormInput();
+    if (jsonInput && Object.keys(formData).length > 0) {
+      jsonInput.value = JSON.stringify(formData, null, 2);
+    }
+  } else if (mode === 'form' && jsonEditor && jsonEditor.style.display !== 'none') {
+    if (jsonInput) {
+      try {
+        const obj = JSON.parse(jsonInput.value);
+        const fields = document.querySelectorAll('#actionFormFields [data-field]');
+        fields.forEach(f => {
+          const name = f.getAttribute('data-field');
+          if (obj[name] !== undefined) f.value = String(obj[name]);
+        });
+      } catch (_) { /* ignore parse errors */ }
+    }
+  }
+
   if (mode === 'form') {
     formBtn?.classList.add('active');
     jsonBtn?.classList.remove('active');

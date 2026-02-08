@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
 	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
@@ -23,6 +25,11 @@ func (staticRunner) RunDetailed(ctx context.Context, input string) (types.RunRes
 }
 
 func main() {
+	if len(os.Args) > 1 && strings.ToLower(os.Args[1]) == "ui" {
+		runDevUI()
+		return
+	}
+
 	ctx := context.Background()
 	store, err := statesqlite.New("./.ai-agent/examples-graph-resume.db")
 	if err != nil {
@@ -78,4 +85,27 @@ func main() {
 		log.Fatalf("resume failed: %v", err)
 	}
 	fmt.Printf("resume run id=%s session=%s\n%s\n", resumed.RunID, resumed.SessionID, resumed.Output)
+}
+
+func runDevUI() {
+	flow.MustRegister(&flow.Definition{
+		Name:         "graph-resume",
+		Description:  "Demonstrates graph execution with prepare→analyze→finalize nodes and run resume capability.",
+		SystemPrompt: "You analyze security incidents and prepare triage reports.",
+		InputExample: "critical vulns found in payment-service",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"input": map[string]any{
+					"type":        "string",
+					"description": "Incident description to process through the graph pipeline.",
+				},
+			},
+			"required": []string{"input"},
+		},
+	})
+
+	if err := devui.Start(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }

@@ -140,10 +140,6 @@ func runDevUI() {
 	})
 
 	addr := "127.0.0.1:8000"
-	if v := os.Getenv("AGENT_UI_ADDR"); v != "" {
-		addr = v
-	}
-
 	if err := devui.Start(context.Background(), devui.Options{
 		Addr: addr,
 	}); err != nil {

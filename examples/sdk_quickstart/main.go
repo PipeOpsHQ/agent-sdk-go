@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
@@ -20,6 +22,11 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && strings.ToLower(os.Args[1]) == "ui" {
+		runDevUI()
+		return
+	}
+
 	ctx := context.Background()
 
 	provider, err := providerfactory.FromEnv(ctx)
@@ -100,6 +107,30 @@ func main() {
 	}
 	fmt.Printf("graph output:\n%s\n\n", graphResult.Output)
 	fmt.Printf("graph ids: run=%s session=%s\n", graphResult.RunID, graphResult.SessionID)
+}
+
+func runDevUI() {
+	flow.MustRegister(&flow.Definition{
+		Name:         "quickstart-agent",
+		Description:  "Quickstart demo: single agent run + 3-node graph (prepare→agent→finalize). Answers security questions with tool support.",
+		Tools:        []string{"@default"},
+		SystemPrompt: "You are concise and practical.",
+		InputExample: "Explain zero trust in 3 bullets.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"input": map[string]any{
+					"type":        "string",
+					"description": "Security topic or question to answer.",
+				},
+			},
+			"required": []string{"input"},
+		},
+	})
+
+	if err := devui.Start(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func buildStore() (state.Store, error) {

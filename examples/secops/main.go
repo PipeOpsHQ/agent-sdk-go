@@ -7,6 +7,8 @@
 //   go run . <trivy-json-file>
 //   go run . <log-file>
 //   cat logs.txt | go run .
+//   go run . ui                    # Launch DevUI at http://127.0.0.1:8000
+//   go run . ui --ui-addr=:9090    # Launch DevUI on custom address
 //
 // Environment Variables:
 //   OPENAI_API_KEY or ANTHROPIC_API_KEY - LLM provider credentials
@@ -28,6 +30,8 @@ import (
 	"time"
 
 	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
@@ -113,6 +117,12 @@ const (
 
 func main() {
 	ctx := context.Background()
+
+	if len(os.Args) > 1 && strings.ToLower(os.Args[1]) == "ui" {
+		runDevUI()
+		return
+	}
+
 	input, err := readInput(os.Args[1:])
 	if err != nil {
 		log.Fatal(err)
@@ -138,6 +148,32 @@ func main() {
 	}
 
 	fmt.Printf("run_id=%s session_id=%s\n\n%s\n", result.RunID, result.SessionID, strings.TrimSpace(result.Output))
+}
+
+func runDevUI() {
+	flow.MustRegister(&flow.Definition{
+		Name:        "secops-analyzer",
+		Description: "SecOps agent that analyzes Trivy vulnerability reports and application logs, returning compact actionable findings.",
+		Tools:       []string{"@default", "@security"},
+		SystemPrompt: secOpsSystemPrompt,
+		InputExample: `{"ArtifactName":"myapp:latest","Results":[{"Vulnerabilities":[{"VulnerabilityID":"CVE-2024-1234","PkgName":"openssl","InstalledVersion":"1.1.1","FixedVersion":"1.1.1w","Severity":"CRITICAL","Title":"Buffer overflow in X.509 parsing"}]}]}`,
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"input": map[string]any{
+					"type":        "string",
+					"description": "Trivy JSON report or raw application log text to analyze.",
+				},
+			},
+			"required": []string{"input"},
+		},
+	})
+
+	if err := devui.Start(context.Background(), devui.Options{
+		Addr: "127.0.0.1:8000",
+	}); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

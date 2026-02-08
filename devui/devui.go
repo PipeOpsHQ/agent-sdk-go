@@ -47,6 +47,7 @@ import (
 
 	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
 	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/api"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic" // registers "basic" workflow
 	authsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth/sqlite"
 	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog/sqlite"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
@@ -267,7 +268,27 @@ func mergeOptions(opts []Options) Options {
 		o = opts[0]
 	}
 
-	// Apply env vars as defaults (user-provided values take priority)
+	// Parse CLI flags from os.Args (so users don't need to handle flags themselves).
+	for _, arg := range os.Args[1:] {
+		switch {
+		case strings.HasPrefix(arg, "--ui-addr="):
+			o.Addr = strings.TrimSpace(strings.TrimPrefix(arg, "--ui-addr="))
+		case strings.HasPrefix(arg, "--ui-db-path="):
+			o.DBPath = strings.TrimSpace(strings.TrimPrefix(arg, "--ui-db-path="))
+		case strings.HasPrefix(arg, "--ui-open="):
+			o.Open = parseBoolStr(strings.TrimPrefix(arg, "--ui-open="), o.Open)
+		case arg == "--ui-open":
+			o.Open = true
+		case strings.HasPrefix(arg, "--ui-require-api-key="):
+			o.RequireAPIKey = parseBoolStr(strings.TrimPrefix(arg, "--ui-require-api-key="), o.RequireAPIKey)
+		case strings.HasPrefix(arg, "--ui-skip-builtins="):
+			o.SkipBuiltinFlows = parseBoolStr(strings.TrimPrefix(arg, "--ui-skip-builtins="), o.SkipBuiltinFlows)
+		case arg == "--ui-skip-builtins":
+			o.SkipBuiltinFlows = true
+		}
+	}
+
+	// Apply env vars as defaults (CLI flags and user-provided values take priority)
 	if o.Addr == "" {
 		o.Addr = strings.TrimSpace(os.Getenv("AGENT_UI_ADDR"))
 	}
@@ -287,7 +308,7 @@ func mergeOptions(opts []Options) Options {
 		o.RequireAPIKey = parseBoolEnv("AGENT_UI_REQUIRE_API_KEY", false)
 	}
 	// AllowLocalNoAuth defaults to true
-	if len(opts) == 0 || (!o.RequireAPIKey && !o.AllowLocalNoAuth) {
+	if !o.RequireAPIKey && !o.AllowLocalNoAuth {
 		o.AllowLocalNoAuth = parseBoolEnv("AGENT_UI_ALLOW_LOCAL_NOAUTH", true)
 	}
 
@@ -481,11 +502,11 @@ func buildRuntime(ctx context.Context, store state.Store, o Options) (*runtimeCo
 }
 
 func parseBoolEnv(key string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	switch strings.ToLower(value) {
+	return parseBoolStr(os.Getenv(key), fallback)
+}
+
+func parseBoolStr(raw string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "1", "true", "yes", "on":
 		return true
 	case "0", "false", "no", "off":
