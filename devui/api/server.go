@@ -14,11 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/devui/auth"
-	"github.com/nitrocode/ai-agents/framework/devui/catalog"
-	"github.com/nitrocode/ai-agents/framework/observe"
-	observestore "github.com/nitrocode/ai-agents/framework/observe/store"
-	"github.com/nitrocode/ai-agents/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
 )
 
 //go:embed static/*
@@ -115,16 +116,18 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/runtime/workers", s.require(auth.RoleViewer, s.handleRuntimeWorkers))
 	s.mux.HandleFunc("/api/v1/runtime/queues", s.require(auth.RoleViewer, s.handleRuntimeQueues))
 	s.mux.HandleFunc("/api/v1/runtime/dlq", s.require(auth.RoleViewer, s.handleRuntimeDLQ))
+	s.mux.HandleFunc("/api/v1/runtime/details", s.require(auth.RoleViewer, s.handleRuntimeDetails))
 	s.mux.HandleFunc("/api/v1/runtime/runs/", s.require(auth.RoleViewer, s.handleRuntimeRunActions))
 
-	s.mux.HandleFunc("/api/v1/tools/templates", s.require(auth.RoleOperator, s.handleToolTemplates))
-	s.mux.HandleFunc("/api/v1/tools/instances", s.require(auth.RoleOperator, s.handleToolInstances))
-	s.mux.HandleFunc("/api/v1/tools/instances/", s.require(auth.RoleOperator, s.handleToolInstanceByID))
-	s.mux.HandleFunc("/api/v1/tools/bundles", s.require(auth.RoleOperator, s.handleToolBundles))
-	s.mux.HandleFunc("/api/v1/workflows", s.require(auth.RoleOperator, s.handleWorkflows))
-	s.mux.HandleFunc("/api/v1/workflows/", s.require(auth.RoleOperator, s.handleWorkflowBindingByID))
+	s.mux.HandleFunc("/api/v1/tools/registry", s.require(auth.RoleViewer, s.handleToolRegistry))
+	s.mux.HandleFunc("/api/v1/tools/templates", s.require(auth.RoleViewer, s.handleToolTemplates))
+	s.mux.HandleFunc("/api/v1/tools/instances", s.require(auth.RoleViewer, s.handleToolInstances))
+	s.mux.HandleFunc("/api/v1/tools/instances/", s.require(auth.RoleViewer, s.handleToolInstanceByID))
+	s.mux.HandleFunc("/api/v1/tools/bundles", s.require(auth.RoleViewer, s.handleToolBundles))
+	s.mux.HandleFunc("/api/v1/workflows", s.require(auth.RoleViewer, s.handleWorkflows))
+	s.mux.HandleFunc("/api/v1/workflows/", s.require(auth.RoleViewer, s.handleWorkflowBindingByID))
 	s.mux.HandleFunc("/api/v1/integrations/providers", s.require(auth.RoleViewer, s.handleIntegrationProviders))
-	s.mux.HandleFunc("/api/v1/integrations/credentials", s.require(auth.RoleOperator, s.handleIntegrationCredentials))
+	s.mux.HandleFunc("/api/v1/integrations/credentials", s.require(auth.RoleViewer, s.handleIntegrationCredentials))
 
 	s.mux.HandleFunc("/api/v1/auth/keys", s.require(auth.RoleAdmin, s.handleAuthKeys))
 	s.mux.HandleFunc("/api/v1/auth/keys/", s.require(auth.RoleAdmin, s.handleAuthKeyByID))
@@ -455,6 +458,60 @@ func (s *Server) handleRuntimeDLQ(w http.ResponseWriter, r *http.Request, _ prin
 	writeJSON(w, http.StatusOK, dlq)
 }
 
+func (s *Server) handleRuntimeDetails(w http.ResponseWriter, r *http.Request, _ principal) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+	response := map[string]any{
+		"available": false,
+		"status":    "unavailable",
+		"queue": map[string]any{
+			"streamLength": 0,
+			"pending":      0,
+			"dlqLength":    0,
+		},
+		"workers":     []any{},
+		"workerCount": 0,
+		"dlqCount":    0,
+	}
+	if s.cfg.Runtime == nil {
+		response["error"] = "runtime service not configured"
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
+
+	errorsByArea := map[string]string{}
+	if queueStats, err := s.cfg.Runtime.QueueStats(r.Context()); err == nil {
+		response["queue"] = queueStats
+	} else {
+		errorsByArea["queue"] = err.Error()
+	}
+
+	if workers, err := s.cfg.Runtime.ListWorkers(r.Context(), 100); err == nil {
+		response["workers"] = workers
+		response["workerCount"] = len(workers)
+	} else {
+		errorsByArea["workers"] = err.Error()
+	}
+
+	if dlq, err := s.cfg.Runtime.ListDLQ(r.Context(), 100); err == nil {
+		response["dlq"] = dlq
+		response["dlqCount"] = len(dlq)
+	} else {
+		errorsByArea["dlq"] = err.Error()
+	}
+
+	response["available"] = true
+	if len(errorsByArea) == 0 {
+		response["status"] = "healthy"
+	} else {
+		response["status"] = "degraded"
+		response["errors"] = errorsByArea
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) handleRuntimeRunActions(w http.ResponseWriter, r *http.Request, p principal) {
 	if s.cfg.Runtime == nil {
 		writeError(w, http.StatusNotImplemented, fmt.Errorf("runtime service not configured"))
@@ -528,6 +585,10 @@ func (s *Server) handleToolTemplates(w http.ResponseWriter, r *http.Request, p p
 		}
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		var item catalog.ToolTemplate
 		if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -545,6 +606,21 @@ func (s *Server) handleToolTemplates(w http.ResponseWriter, r *http.Request, p p
 	}
 }
 
+func (s *Server) handleToolRegistry(w http.ResponseWriter, r *http.Request, _ principal) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+	tools := fwtools.ToolCatalog()
+	bundles := fwtools.BundleCatalog()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tools":      tools,
+		"bundles":    bundles,
+		"toolCount":  len(tools),
+		"bundleCount": len(bundles),
+	})
+}
+
 func (s *Server) handleToolInstances(w http.ResponseWriter, r *http.Request, p principal) {
 	if s.cfg.CatalogStore == nil {
 		writeError(w, http.StatusNotImplemented, fmt.Errorf("catalog store not configured"))
@@ -559,6 +635,10 @@ func (s *Server) handleToolInstances(w http.ResponseWriter, r *http.Request, p p
 		}
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		var item catalog.ToolInstance
 		if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -588,6 +668,10 @@ func (s *Server) handleToolInstanceByID(w http.ResponseWriter, r *http.Request, 
 	}
 	switch r.Method {
 	case http.MethodPatch:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		var item catalog.ToolInstance
 		if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -602,6 +686,10 @@ func (s *Server) handleToolInstanceByID(w http.ResponseWriter, r *http.Request, 
 		s.audit(r.Context(), p, "catalog.instance.patch", "tool_instances", saved)
 		writeJSON(w, http.StatusOK, saved)
 	case http.MethodDelete:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		if err := s.cfg.CatalogStore.DeleteInstance(r.Context(), id); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -627,6 +715,10 @@ func (s *Server) handleToolBundles(w http.ResponseWriter, r *http.Request, p pri
 		}
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		var item catalog.ToolBundle
 		if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -678,6 +770,10 @@ func (s *Server) handleWorkflowBindingByID(w http.ResponseWriter, r *http.Reques
 	}
 	switch r.Method {
 	case http.MethodPatch:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		var input catalog.WorkflowToolBinding
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -717,6 +813,10 @@ func (s *Server) handleIntegrationProviders(w http.ResponseWriter, r *http.Reque
 		}
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		var provider catalog.IntegrationProvider
 		if err := json.NewDecoder(r.Body).Decode(&provider); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -749,6 +849,10 @@ func (s *Server) handleIntegrationCredentials(w http.ResponseWriter, r *http.Req
 		}
 		writeJSON(w, http.StatusOK, items)
 	case http.MethodPost:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		var meta catalog.IntegrationCredentialMeta
 		if err := json.NewDecoder(r.Body).Decode(&meta); err != nil {
 			writeError(w, http.StatusBadRequest, err)

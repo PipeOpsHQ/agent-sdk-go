@@ -9,7 +9,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/nitrocode/ai-agents/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
 )
 
 const (

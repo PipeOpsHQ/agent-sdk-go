@@ -8,8 +8,8 @@ import (
 
 	"google.golang.org/genai"
 
-	"github.com/nitrocode/ai-agents/framework/llm"
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 const defaultModel = "gemini-2.5-flash"

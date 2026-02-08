@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 func TestClientGenerate_MapsAzureRequest(t *testing.T) {

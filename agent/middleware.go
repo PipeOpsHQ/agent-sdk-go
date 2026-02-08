@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 type Middleware interface {

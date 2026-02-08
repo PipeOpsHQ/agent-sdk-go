@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/runtime/queue"
-	"github.com/nitrocode/ai-agents/framework/state"
-	statesqlite "github.com/nitrocode/ai-agents/framework/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
 )
 
 type singleDeliveryQueue struct {

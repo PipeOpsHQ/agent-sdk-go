@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nitrocode/ai-agents/framework/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
 )
 
 func TestStore_CreateAndVerifyKey(t *testing.T) {

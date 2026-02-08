@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	"github.com/nitrocode/ai-agents/framework/runtime/distributed"
-	"github.com/nitrocode/ai-agents/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
 )
 
 type RuntimeService interface {

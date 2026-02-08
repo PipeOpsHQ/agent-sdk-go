@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/state"
-	"github.com/nitrocode/ai-agents/framework/state/hybrid"
-	redisstore "github.com/nitrocode/ai-agents/framework/state/redis"
-	sqlitestore "github.com/nitrocode/ai-agents/framework/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state/hybrid"
+	redisstore "github.com/PipeOpsHQ/agent-sdk-go/framework/state/redis"
+	sqlitestore "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
 )
 
 func FromEnv(ctx context.Context) (state.Store, error) {

@@ -3,7 +3,7 @@ package api
 import (
 	"sync"
 
-	"github.com/nitrocode/ai-agents/framework/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 )
 
 type eventStream struct {

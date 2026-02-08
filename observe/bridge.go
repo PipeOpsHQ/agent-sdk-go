@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 func FromRuntimeEvent(in types.Event) Event {

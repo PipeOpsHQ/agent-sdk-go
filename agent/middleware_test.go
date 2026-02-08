@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 func TestNoopMiddleware_BeforeGenerate_NormalizesEvent(t *testing.T) {

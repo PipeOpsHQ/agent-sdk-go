@@ -131,7 +131,7 @@ flowchart LR
 - `framework/providers`: provider implementations + factory
 - `framework/tools`: tools, bundles, registry
 - `framework/integrations`: integration metadata + credential refs
-- `framework/examples/sdk_quickstart`: SDK usage example
+- `framework/examples`: runnable SDK examples for common patterns
 
 ## Quick Start
 
@@ -196,18 +196,20 @@ Create admin key:
 go run ./cmd/ai-agent-framework ui-admin create-key --role=admin
 ```
 
-## SDK Example
+## SDK Examples
 
-Run the SDK quickstart:
+Examples index:
+- `framework/examples/README.md`
+
+Run examples:
 ```bash
+go run ./framework/examples/agent_minimal
+go run ./framework/examples/agent_custom_tool
+go run ./framework/examples/graph_resume
+go run ./framework/examples/distributed_enqueue
+go run ./framework/examples/secops_sdk sample-data/app.log
 go run ./framework/examples/sdk_quickstart
 ```
-
-It demonstrates:
-- provider setup
-- state + observer wiring
-- single-agent `RunDetailed`
-- static graph execution
 
 ## Make Targets
 

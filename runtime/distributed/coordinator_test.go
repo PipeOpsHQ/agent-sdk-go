@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/runtime/queue"
-	statesqlite "github.com/nitrocode/ai-agents/framework/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
+	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
 )
 
 type fakeQueue struct {

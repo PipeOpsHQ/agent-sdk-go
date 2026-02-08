@@ -14,8 +14,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/nitrocode/ai-agents/framework/state"
-	fwtypes "github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	fwtypes "github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 //go:embed schema.sql

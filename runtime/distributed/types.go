@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
 )
 
 type ExecutionMode string

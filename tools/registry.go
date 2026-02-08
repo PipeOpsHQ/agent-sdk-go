@@ -15,6 +15,11 @@ type Bundle struct {
 	Tools       []string
 }
 
+type ToolInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 var (
 	regMu         sync.RWMutex
 	toolFactories = map[string]Factory{}
@@ -97,6 +102,36 @@ func BundleNames() []string {
 		out = append(out, n)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func ToolCatalog() []ToolInfo {
+	regMu.RLock()
+	defer regMu.RUnlock()
+	out := make([]ToolInfo, 0, len(toolFactories))
+	for name := range toolFactories {
+		out = append(out, ToolInfo{
+			Name:        name,
+			Description: toolDescs[name],
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+func BundleCatalog() []Bundle {
+	regMu.RLock()
+	defer regMu.RUnlock()
+	out := make([]Bundle, 0, len(bundles))
+	for _, bundle := range bundles {
+		clone := Bundle{
+			Name:        bundle.Name,
+			Description: bundle.Description,
+			Tools:       append([]string(nil), bundle.Tools...),
+		}
+		out = append(out, clone)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 

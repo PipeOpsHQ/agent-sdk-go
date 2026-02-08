@@ -5,8 +5,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/nitrocode/ai-agents/framework/graph"
-	"github.com/nitrocode/ai-agents/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
 )
 
 type Builder interface {

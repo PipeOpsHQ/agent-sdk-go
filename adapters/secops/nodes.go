@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	appsecops "github.com/nitrocode/ai-agents/app/secops"
-	"github.com/nitrocode/ai-agents/framework/graph"
+	appsecops "github.com/PipeOpsHQ/agent-sdk-go/app/secops"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
 )
 
 const (

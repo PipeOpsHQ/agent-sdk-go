@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nitrocode/ai-agents/framework/devui/catalog"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog"
 )
 
 func TestStore_SaveAndListCatalog(t *testing.T) {

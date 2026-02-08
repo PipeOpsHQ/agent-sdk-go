@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/state"
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 type memoryStore struct {

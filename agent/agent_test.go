@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nitrocode/ai-agents/framework/llm"
-	"github.com/nitrocode/ai-agents/framework/state"
-	"github.com/nitrocode/ai-agents/framework/tools"
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 type mockProvider struct {

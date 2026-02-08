@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 	"github.com/google/uuid"
-	"github.com/nitrocode/ai-agents/framework/state"
-	"github.com/nitrocode/ai-agents/framework/types"
 )
 
 func newTestRedisStore(t *testing.T) *Store {

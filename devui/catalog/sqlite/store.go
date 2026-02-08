@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog"
 	"github.com/google/uuid"
-	"github.com/nitrocode/ai-agents/framework/devui/catalog"
 	_ "modernc.org/sqlite"
 )
 

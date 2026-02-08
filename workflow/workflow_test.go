@@ -3,9 +3,9 @@ package workflow_test
 import (
 	"testing"
 
-	_ "github.com/nitrocode/ai-agents/framework/graphs/basic"
-	_ "github.com/nitrocode/ai-agents/framework/graphs/secops"
-	"github.com/nitrocode/ai-agents/framework/workflow"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/secops"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
 )
 
 func TestBuiltInWorkflowsRegistered(t *testing.T) {

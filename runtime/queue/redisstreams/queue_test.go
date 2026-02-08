@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
 	"github.com/google/uuid"
-	"github.com/nitrocode/ai-agents/framework/runtime/queue"
 )
 
 func newTestQueue(t *testing.T) *Queue {

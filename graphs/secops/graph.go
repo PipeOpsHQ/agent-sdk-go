@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	secopsadapters "github.com/nitrocode/ai-agents/framework/adapters/secops"
-	"github.com/nitrocode/ai-agents/framework/graph"
-	"github.com/nitrocode/ai-agents/framework/state"
+	secopsadapters "github.com/PipeOpsHQ/agent-sdk-go/framework/adapters/secops"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
 )
 
 type Config struct {

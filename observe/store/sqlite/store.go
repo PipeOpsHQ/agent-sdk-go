@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
 	"github.com/google/uuid"
-	"github.com/nitrocode/ai-agents/framework/observe"
-	observestore "github.com/nitrocode/ai-agents/framework/observe/store"
 	_ "modernc.org/sqlite"
 )
 

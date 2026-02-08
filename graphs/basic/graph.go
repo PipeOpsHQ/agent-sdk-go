@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nitrocode/ai-agents/framework/graph"
-	"github.com/nitrocode/ai-agents/framework/state"
-	"github.com/nitrocode/ai-agents/framework/workflow"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
 )
 
 const Name = "basic"

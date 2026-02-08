@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nitrocode/ai-agents/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
 )
 
 var ErrNotSupported = errors.New("operation not supported by provider")

@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
 	"github.com/google/uuid"
-	"github.com/nitrocode/ai-agents/framework/observe"
-	"github.com/nitrocode/ai-agents/framework/runtime/queue"
-	"github.com/nitrocode/ai-agents/framework/state"
 )
 
 type Worker interface {

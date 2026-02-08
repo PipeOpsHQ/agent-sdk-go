@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/nitrocode/ai-agents/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
 )
 
 type HybridStore struct {

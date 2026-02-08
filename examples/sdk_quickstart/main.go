@@ -7,16 +7,16 @@ import (
 	"os"
 	"strings"
 
-	agentfw "github.com/nitrocode/ai-agents/framework/agent"
-	"github.com/nitrocode/ai-agents/framework/graph"
-	"github.com/nitrocode/ai-agents/framework/observe"
-	observesqlite "github.com/nitrocode/ai-agents/framework/observe/store/sqlite"
-	providerfactory "github.com/nitrocode/ai-agents/framework/providers/factory"
-	"github.com/nitrocode/ai-agents/framework/state"
-	statehybrid "github.com/nitrocode/ai-agents/framework/state/hybrid"
-	stateredis "github.com/nitrocode/ai-agents/framework/state/redis"
-	statesqlite "github.com/nitrocode/ai-agents/framework/state/sqlite"
-	"github.com/nitrocode/ai-agents/framework/tools"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	statehybrid "github.com/PipeOpsHQ/agent-sdk-go/framework/state/hybrid"
+	stateredis "github.com/PipeOpsHQ/agent-sdk-go/framework/state/redis"
+	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
 )
 
 func main() {
