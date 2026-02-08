@@ -29,6 +29,8 @@ import (
 	"time"
 
 	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
@@ -100,11 +102,52 @@ func main() {
 	switch cmd {
 	case "analyze":
 		runAnalyze(os.Args[2:])
+	case "ui":
+		runDevUI()
 	case "help", "-h", "--help":
 		printUsage()
 	default:
 		// Treat first arg as log file for convenience
 		runAnalyze(os.Args[1:])
+	}
+}
+
+func runDevUI() {
+	// Register the log-analyzer flow so it appears in the DevUI Playground & Actions tab.
+	flow.MustRegister(&flow.Definition{
+		Name:        "log-analyzer",
+		Description: "Analyzes application logs, identifies issues by severity, suggests root causes and actionable fixes.",
+		Tools:       []string{"file_system", "code_search", "shell_command", "@default"},
+		SystemPrompt: logAnalyzerPrompt,
+		InputExample: `2026-02-08 10:23:45 ERROR NullPointerException in UserService.java:142
+2026-02-08 10:23:46 WARN Connection pool exhausted, waiting for available connection
+2026-02-08 10:23:47 ERROR Failed to process payment: timeout after 30s`,
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"input": map[string]any{
+					"type":        "string",
+					"description": "Log entries to analyze (paste raw log text).",
+				},
+				"severity_filter": map[string]any{
+					"type":        "string",
+					"description": "Minimum severity to report.",
+					"enum":        []string{"all", "low", "medium", "high", "critical"},
+				},
+			},
+			"required": []string{"input"},
+		},
+	})
+
+	addr := "127.0.0.1:8000"
+	if v := os.Getenv("AGENT_UI_ADDR"); v != "" {
+		addr = v
+	}
+
+	if err := devui.Start(context.Background(), devui.Options{
+		Addr: addr,
+	}); err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -642,6 +685,7 @@ func printUsage() {
 Usage:
   go run . analyze <log-file> [options]
   go run . analyze --repo=<url> <log-file>
+  go run . ui                              # Launch DevUI at http://127.0.0.1:8000
   cat logs.txt | go run . analyze [options]
 
 Options:

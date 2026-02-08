@@ -1,0 +1,521 @@
+// Package devui provides a Genkit-style developer UI for the agent framework.
+//
+// Users import this package in their own application and call [Start] to
+// launch the DevUI alongside their registered flows, tools, and workflows.
+//
+// Example:
+//
+//	package main
+//
+//	import (
+//	    "context"
+//	    "log"
+//
+//	    "github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
+//	    "github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
+//	)
+//
+//	func main() {
+//	    // Register your custom flows
+//	    flow.MustRegister(&flow.Definition{
+//	        Name:        "my-agent",
+//	        Description: "My custom agent flow",
+//	        Tools:       []string{"file_system", "shell_command"},
+//	        SystemPrompt: "You are a helpful assistant.",
+//	        InputExample: "Analyze this log file",
+//	    })
+//
+//	    // Start the DevUI — blocks until interrupted
+//	    if err := devui.Start(context.Background()); err != nil {
+//	        log.Fatal(err)
+//	    }
+//	}
+package devui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
+	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/api"
+	authsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth/sqlite"
+	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue/redisstreams"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	statefactory "github.com/PipeOpsHQ/agent-sdk-go/framework/state/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+)
+
+// Options configures the DevUI server.
+type Options struct {
+	// Addr is the listen address (default: "127.0.0.1:7070").
+	// Can also be set via AGENT_UI_ADDR env var.
+	Addr string
+
+	// DBPath is the SQLite database path for traces, catalog, and auth.
+	// Default: "./.ai-agent/devui.db". Env: AGENT_DEVUI_DB_PATH.
+	DBPath string
+
+	// RegisterBuiltinFlows controls whether built-in example flows
+	// (code-reviewer, devops-assistant, etc.) are registered automatically.
+	// Default: true. Set SkipBuiltinFlows to true to disable.
+	SkipBuiltinFlows bool
+
+	// Open automatically opens the browser when the server starts.
+	// Default: false. Env: AGENT_UI_OPEN.
+	Open bool
+
+	// RequireAPIKey forces API key authentication.
+	// Default: false. Env: AGENT_UI_REQUIRE_API_KEY.
+	RequireAPIKey bool
+
+	// AllowLocalNoAuth allows unauthenticated access from localhost.
+	// Default: true. Env: AGENT_UI_ALLOW_LOCAL_NOAUTH.
+	AllowLocalNoAuth bool
+}
+
+// Start launches the DevUI server with sensible defaults. It blocks until
+// the context is cancelled or an interrupt signal is received.
+//
+// Users should register their flows (via [flow.Register]) and custom tools
+// (via [tools.RegisterTool]) before calling Start.
+func Start(ctx context.Context, opts ...Options) error {
+	o := mergeOptions(opts)
+
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if !o.SkipBuiltinFlows {
+		flow.RegisterBuiltins()
+	}
+
+	// State store
+	store, err := statefactory.FromEnv(ctx)
+	if err != nil {
+		log.Printf("state store unavailable: %v", err)
+	}
+	if store != nil {
+		defer func() { _ = store.Close() }()
+	}
+
+	// Trace store
+	traceStore, err := observesqlite.New(o.DBPath)
+	if err != nil {
+		log.Printf("trace store unavailable: %v", err)
+	}
+	if traceStore != nil {
+		defer func() { _ = traceStore.Close() }()
+	}
+
+	// Catalog store
+	catalogStore, err := catalogsqlite.New(o.DBPath)
+	if err != nil {
+		log.Printf("catalog store unavailable: %v", err)
+	}
+	if catalogStore != nil {
+		defer func() { _ = catalogStore.Close() }()
+	}
+
+	// Auth store
+	authStore, err := authsqlite.New(o.DBPath)
+	if err != nil {
+		if o.RequireAPIKey {
+			return fmt.Errorf("auth store setup failed (required for API key mode): %w", err)
+		}
+		log.Printf("auth store unavailable (local no-auth mode): %v", err)
+	}
+	if authStore != nil {
+		defer func() { _ = authStore.Close() }()
+	}
+
+	// Audit store
+	auditStore, err := devuiapi.NewSQLiteAuditStore(o.DBPath)
+	if err != nil {
+		log.Printf("audit store unavailable: %v", err)
+	}
+	if closer, ok := auditStore.(interface{ Close() error }); ok {
+		defer func() { _ = closer.Close() }()
+	}
+
+	// Observer
+	observer := observe.Sink(observe.NoopSink{})
+	if traceStore != nil {
+		async := observe.NewAsyncSink(observe.SinkFunc(func(ctx context.Context, event observe.Event) error {
+			return traceStore.SaveEvent(ctx, event)
+		}), 256)
+		observer = async
+		defer async.Close()
+	}
+
+	// Playground runner
+	playground := &playgroundRunner{store: store, observer: observer}
+
+	// Runtime (optional — requires Redis)
+	rtComponents, closeRuntime := buildRuntime(ctx, store, o)
+	defer closeRuntime()
+
+	var runtimeService devuiapi.RuntimeService
+	if rtComponents != nil {
+		runtimeService = rtComponents.service
+
+		// Inline worker
+		processor := func(ctx context.Context, task queue.Task) (distributed.ProcessResult, error) {
+			resp, err := playground.Run(ctx, devuiapi.PlaygroundRequest{
+				Input:        task.Input,
+				Workflow:     task.Workflow,
+				Tools:        task.Tools,
+				SystemPrompt: task.SystemPrompt,
+			})
+			if err != nil {
+				return distributed.ProcessResult{}, err
+			}
+			return distributed.ProcessResult{Output: resp.Output, Provider: resp.Provider}, nil
+		}
+
+		inlineWorker, wErr := distributed.NewWorker(
+			distributed.WorkerConfig{WorkerID: "devui-inline", Capacity: 2},
+			store,
+			rtComponents.attemptStore,
+			rtComponents.queue,
+			observer,
+			distributed.DefaultRuntimePolicy(),
+			processor,
+		)
+		if wErr != nil {
+			log.Printf("inline worker unavailable: %v", wErr)
+		} else {
+			go func() {
+				if err := inlineWorker.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+					log.Printf("inline worker stopped: %v", err)
+				}
+			}()
+			defer func() { _ = inlineWorker.Stop(context.Background()) }()
+			log.Println("inline worker started (capacity=2)")
+		}
+	}
+
+	// Cron scheduler
+	scheduler := cronpkg.New(func(cfg cronpkg.JobConfig) (string, error) {
+		resp, err := playground.Run(ctx, devuiapi.PlaygroundRequest{
+			Input:        cfg.Input,
+			Workflow:     cfg.Workflow,
+			Tools:        cfg.Tools,
+			SystemPrompt: cfg.SystemPrompt,
+		})
+		if err != nil {
+			return "", err
+		}
+		return resp.Output, nil
+	})
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	// Register cron_manager tool
+	_ = tools.RegisterTool("cron_manager",
+		"Manage cron-scheduled agent jobs: list, add, remove, trigger, enable, disable recurring tasks.",
+		func() tools.Tool { return tools.NewCronManager(scheduler) },
+	)
+
+	// Start HTTP server
+	server := devuiapi.NewServer(devuiapi.Config{
+		Addr:             o.Addr,
+		StateStore:       store,
+		TraceStore:       traceStore,
+		CatalogStore:     catalogStore,
+		AuthStore:        authStore,
+		AuditStore:       auditStore,
+		Runtime:          runtimeService,
+		Playground:       playground,
+		Scheduler:        scheduler,
+		RequireAPIKey:    o.RequireAPIKey,
+		AllowLocalNoAuth: o.AllowLocalNoAuth,
+	})
+
+	log.Printf("DevUI listening on http://%s", o.Addr)
+	if o.Open {
+		openBrowser("http://" + o.Addr)
+	}
+	if err := server.ListenAndServe(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("devui server failed: %w", err)
+	}
+	return nil
+}
+
+// ── internals ──
+
+func mergeOptions(opts []Options) Options {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
+	// Apply env vars as defaults (user-provided values take priority)
+	if o.Addr == "" {
+		o.Addr = strings.TrimSpace(os.Getenv("AGENT_UI_ADDR"))
+	}
+	if o.Addr == "" {
+		o.Addr = "127.0.0.1:7070"
+	}
+	if o.DBPath == "" {
+		o.DBPath = strings.TrimSpace(os.Getenv("AGENT_DEVUI_DB_PATH"))
+	}
+	if o.DBPath == "" {
+		o.DBPath = "./.ai-agent/devui.db"
+	}
+	if !o.Open {
+		o.Open = parseBoolEnv("AGENT_UI_OPEN", false)
+	}
+	if !o.RequireAPIKey {
+		o.RequireAPIKey = parseBoolEnv("AGENT_UI_REQUIRE_API_KEY", false)
+	}
+	// AllowLocalNoAuth defaults to true
+	if len(opts) == 0 || (!o.RequireAPIKey && !o.AllowLocalNoAuth) {
+		o.AllowLocalNoAuth = parseBoolEnv("AGENT_UI_ALLOW_LOCAL_NOAUTH", true)
+	}
+
+	return o
+}
+
+// playgroundRunner executes agent flows for the playground.
+type playgroundRunner struct {
+	store    state.Store
+	observer observe.Sink
+}
+
+func (r *playgroundRunner) Run(ctx context.Context, req devuiapi.PlaygroundRequest) (devuiapi.PlaygroundResponse, error) {
+	provider, err := providerfactory.FromEnv(ctx)
+	if err != nil {
+		return devuiapi.PlaygroundResponse{}, fmt.Errorf("provider setup failed: %w", err)
+	}
+
+	// Resolve flow defaults — request fields override flow defaults.
+	if name := strings.TrimSpace(req.Flow); name != "" {
+		if f, ok := flow.Get(name); ok {
+			if strings.TrimSpace(req.Workflow) == "" {
+				req.Workflow = f.Workflow
+			}
+			if len(req.Tools) == 0 {
+				req.Tools = f.Tools
+			}
+			if strings.TrimSpace(req.SystemPrompt) == "" {
+				req.SystemPrompt = f.SystemPrompt
+			}
+		}
+	}
+
+	wfName := strings.TrimSpace(req.Workflow)
+	systemPrompt := strings.TrimSpace(req.SystemPrompt)
+	if systemPrompt == "" {
+		systemPrompt = "You are a practical AI assistant. Be concise, accurate, and actionable."
+	}
+
+	// Build agent
+	agentOpts := []agentfw.Option{
+		agentfw.WithSystemPrompt(systemPrompt),
+		agentfw.WithMaxIterations(25),
+	}
+	if r.store != nil {
+		agentOpts = append(agentOpts, agentfw.WithStore(r.store))
+	}
+	if r.observer != nil {
+		agentOpts = append(agentOpts, agentfw.WithObserver(r.observer))
+	}
+
+	// Attach tools
+	if len(req.Tools) > 0 {
+		selected, err := tools.BuildSelection(req.Tools)
+		if err != nil {
+			return devuiapi.PlaygroundResponse{}, fmt.Errorf("tool selection failed: %w", err)
+		}
+		for _, t := range selected {
+			agentOpts = append(agentOpts, agentfw.WithTool(t))
+		}
+	}
+
+	agent, err := agentfw.New(provider, agentOpts...)
+	if err != nil {
+		return devuiapi.PlaygroundResponse{}, fmt.Errorf("agent create failed: %w", err)
+	}
+
+	// Direct run (no workflow graph)
+	if wfName == "" {
+		result, runErr := agent.RunDetailed(ctx, req.Input)
+		if runErr != nil {
+			return devuiapi.PlaygroundResponse{}, runErr
+		}
+		return devuiapi.PlaygroundResponse{
+			Status:    "completed",
+			Output:    result.Output,
+			RunID:     result.RunID,
+			SessionID: result.SessionID,
+			Provider:  provider.Name(),
+		}, nil
+	}
+
+	// Workflow graph run
+	exec, err := buildExecutor(agent, r.store, r.observer, wfName)
+	if err != nil {
+		return devuiapi.PlaygroundResponse{}, fmt.Errorf("executor create failed: %w", err)
+	}
+	result, runErr := exec.Run(ctx, req.Input)
+	if runErr != nil {
+		return devuiapi.PlaygroundResponse{}, runErr
+	}
+	return devuiapi.PlaygroundResponse{
+		Status:    "completed",
+		Output:    result.Output,
+		RunID:     result.RunID,
+		SessionID: result.SessionID,
+		Provider:  provider.Name(),
+	}, nil
+}
+
+func buildExecutor(agent *agentfw.Agent, store state.Store, observer observe.Sink, wfName string) (*graph.Executor, error) {
+	builder, ok := workflow.Get(wfName)
+	if !ok {
+		return nil, fmt.Errorf("unknown workflow %q (available: %s)", wfName, strings.Join(workflow.Names(), ", "))
+	}
+	exec, err := builder.NewExecutor(agent, store, "")
+	if err != nil {
+		return nil, err
+	}
+	exec.SetObserver(observer)
+	return exec, nil
+}
+
+type runtimeComponents struct {
+	service      devuiapi.RuntimeService
+	attemptStore distributed.AttemptStore
+	queue        *redisstreams.Queue
+}
+
+func buildRuntime(ctx context.Context, store state.Store, o Options) (*runtimeComponents, func()) {
+	if store == nil {
+		return nil, func() {}
+	}
+
+	attemptsPath := filepath.Join(filepath.Dir(o.DBPath), "runtime.db")
+	redisAddr := strings.TrimSpace(os.Getenv("AGENT_REDIS_ADDR"))
+	if redisAddr == "" {
+		redisAddr = "127.0.0.1:6379"
+	}
+	redisPassword := strings.TrimSpace(os.Getenv("AGENT_REDIS_PASSWORD"))
+	redisDB := parseIntEnv("AGENT_REDIS_DB", 0)
+	queuePrefix := strings.TrimSpace(os.Getenv("AGENT_RUNTIME_QUEUE_PREFIX"))
+	if queuePrefix == "" {
+		queuePrefix = "aiag:queue"
+	}
+	queueGroup := strings.TrimSpace(os.Getenv("AGENT_RUNTIME_QUEUE_GROUP"))
+	if queueGroup == "" {
+		queueGroup = "workers"
+	}
+
+	attemptStore, err := distributed.NewSQLiteAttemptStore(attemptsPath)
+	if err != nil {
+		log.Printf("runtime attempt store unavailable: %v", err)
+		return nil, func() {}
+	}
+
+	queueStore, err := redisstreams.New(
+		redisAddr,
+		redisstreams.WithPassword(redisPassword),
+		redisstreams.WithDB(redisDB),
+		redisstreams.WithPrefix(queuePrefix),
+		redisstreams.WithGroup(queueGroup),
+	)
+	if err != nil {
+		_ = attemptStore.Close()
+		log.Printf("runtime queue unavailable: %v", err)
+		return nil, func() {}
+	}
+
+	service, err := distributed.NewCoordinator(
+		store,
+		attemptStore,
+		queueStore,
+		observe.NoopSink{},
+		distributed.DistributedConfig{
+			Queue: distributed.QueueConfig{
+				Name:   "runs",
+				Prefix: queuePrefix,
+			},
+		},
+	)
+	if err != nil {
+		_ = queueStore.Close()
+		_ = attemptStore.Close()
+		log.Printf("runtime service unavailable: %v", err)
+		return nil, func() {}
+	}
+
+	if _, claimErr := queueStore.Claim(ctx, "devui-bootstrap", time.Millisecond, 1); claimErr != nil {
+		log.Printf("runtime bootstrap claim warning: %v", claimErr)
+	}
+
+	return &runtimeComponents{
+		service:      service,
+		attemptStore: attemptStore,
+		queue:        queueStore,
+	}, func() {
+		_ = queueStore.Close()
+		_ = attemptStore.Close()
+	}
+}
+
+func parseBoolEnv(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func parseIntEnv(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+func openBrowser(target string) {
+	if strings.TrimSpace(target) == "" {
+		return
+	}
+	// Best-effort — works on macOS, Linux, Windows
+	for _, cmd := range []string{"open", "xdg-open", "rundll32"} {
+		if p, err := os.StartProcess(cmd, []string{cmd, target}, &os.ProcAttr{}); err == nil {
+			_ = p.Release()
+			return
+		}
+	}
+}
