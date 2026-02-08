@@ -14,6 +14,15 @@ const api = {
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return res.json();
   },
+  request: async (path, opts = {}) => {
+    const res = await fetch(path, {
+      ...opts,
+      headers: { ...authHeaders(), 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const text = await res.text();
+    return text ? JSON.parse(text) : {};
+  },
 };
 
 function authHeaders() {
@@ -113,6 +122,8 @@ function switchTab(tab) {
   });
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(`tab-${tab}`)?.classList.add('active');
+  if (tab === 'scheduler') loadCronJobs();
+  if (tab === 'actions') loadActions();
 }
 
 function initNavigation() {
@@ -153,16 +164,18 @@ function initNavigation() {
 // ===== Dashboard =====
 async function loadDashboard() {
   try {
-    const [metrics, runtime, registry] = await Promise.all([
+    const [metrics, runtime, registry, recentRuns] = await Promise.all([
       api.get('/api/v1/metrics/summary').catch(() => ({})),
       api.get('/api/v1/runtime/details').catch(() => ({ available: false, status: 'unavailable' })),
       api.get('/api/v1/tools/registry').catch(() => ({ toolCount: 0 })),
+      api.get('/api/v1/runs?limit=1').catch(() => []),
     ]);
 
     // Update metrics
-    const completed = metrics.completed || metrics.total_completed || 0;
-    const running = metrics.running || metrics.in_progress || 0;
-    const failed = metrics.failed || metrics.total_failed || 0;
+    const completed = metrics.runsCompleted || metrics.completed || metrics.total_completed || 0;
+    const failed = metrics.runsFailed || metrics.failed || metrics.total_failed || 0;
+    const started = metrics.runsStarted || 0;
+    const running = Math.max(0, started - completed - failed) || metrics.running || metrics.in_progress || 0;
     const tools = registry.toolCount || metrics.tools || metrics.active_tools || 0;
 
     document.getElementById('metric-completed').textContent = completed;
@@ -171,7 +184,9 @@ async function loadDashboard() {
     document.getElementById('metric-tools').textContent = tools;
     const providerEl = document.getElementById('status-provider');
     if (providerEl) {
-      providerEl.textContent = metrics.provider || metrics.primaryProvider || 'mixed';
+      const runs = Array.isArray(recentRuns) ? recentRuns : [];
+      const provider = runs[0]?.provider || metrics.provider || metrics.primaryProvider || 'n/a';
+      providerEl.textContent = provider;
     }
 
     // Update status indicators
@@ -334,10 +349,13 @@ async function selectRun(runId) {
     await loadInterventions(runId);
 
     // Update messages
-    renderMessages(currentRunEvents);
+    renderMessages(currentRunEvents, run);
 
     // Update tool calls
-    renderToolCalls(currentRunEvents);
+    renderToolCalls(currentRunEvents, run);
+
+    // Update trace tree
+    renderTraceTree(run, currentRunEvents);
 
   } catch (e) {
     console.error('Failed to load run details:', e);
@@ -465,16 +483,27 @@ function renderExecutionState(run, attempts, events) {
   const container = document.getElementById('runExecutionState');
   if (!container) return;
   const checkpoints = events.filter((e) => inferEventKind(e) === 'checkpoint').length;
-  const toolCalls = events.filter((e) => inferEventKind(e) === 'tool').length;
   const retries = events.filter((e) => inferEventKind(e) === 'retry').length;
   const latestAttempt = Array.isArray(attempts) && attempts.length ? attempts[0] : null;
   const metadata = run?.metadata || {};
+
+  // Count tool calls from run.messages if available, else from events
+  const runMessages = Array.isArray(run?.messages) ? run.messages : [];
+  let toolCalls = 0;
+  runMessages.forEach(m => { if (m.toolCalls?.length) toolCalls += m.toolCalls.length; });
+  if (toolCalls === 0) toolCalls = events.filter((e) => inferEventKind(e) === 'tool').length;
+
+  // Count tokens from usage
+  const usage = run?.usage || {};
+  const tokens = usage.totalTokens || usage.total_tokens || 0;
+
   container.innerHTML = `
     <div class="exec-row"><span>Status</span><strong>${escapeHtml(runStatusOf(run))}</strong></div>
     <div class="exec-row"><span>Provider</span><strong>${escapeHtml(run?.provider || 'unknown')}</strong></div>
     <div class="exec-row"><span>Current Node</span><strong>${escapeHtml(metadata.lastNodeId || metadata.node || 'n/a')}</strong></div>
     <div class="exec-row"><span>Last Checkpoint</span><strong>${checkpoints}</strong></div>
     <div class="exec-row"><span>Tool Calls</span><strong>${toolCalls}</strong></div>
+    <div class="exec-row"><span>Tokens</span><strong>${tokens > 0 ? tokens.toLocaleString() : 'n/a'}</strong></div>
     <div class="exec-row"><span>Retries</span><strong>${retries}</strong></div>
     <div class="exec-row"><span>Attempt</span><strong>${escapeHtml(latestAttempt ? String(latestAttempt.attempt) : 'n/a')}</strong></div>
     <div class="exec-row"><span>Worker</span><strong>${escapeHtml(latestAttempt?.workerId || 'n/a')}</strong></div>
@@ -526,10 +555,44 @@ async function sendIntervention(action, extra = {}) {
   }
 }
 
-function renderMessages(events) {
+function renderMessages(events, run) {
   const container = document.getElementById('runMessages');
   if (!container) return;
 
+  // Prefer run.messages (actual LLM conversation) over observer events
+  const runMessages = Array.isArray(run?.messages) ? run.messages : [];
+  if (runMessages.length > 0) {
+    container.innerHTML = runMessages.map(msg => {
+      const role = msg.role || 'unknown';
+      const roleClass = role === 'user' ? 'user' : (role === 'assistant' ? 'assistant' : 'tool');
+      const content = msg.content || '';
+      const toolCalls = msg.toolCalls || [];
+      let body = '';
+      if (content) {
+        body = `<pre class="code-block" style="margin: 0; padding: 8px; font-size: 11px; white-space: pre-wrap;">${escapeHtml(content)}</pre>`;
+      }
+      if (toolCalls.length > 0) {
+        body += toolCalls.map(tc => `
+          <div style="margin-top: 4px; padding: 6px 8px; background: var(--bg-tertiary); border-radius: 4px; font-size: 11px;">
+            <strong>${escapeHtml(tc.name || 'tool')}</strong>
+            <pre class="code-block" style="margin: 4px 0 0; padding: 4px; font-size: 10px;">${escapeHtml(JSON.stringify(tc.arguments, null, 2))}</pre>
+          </div>
+        `).join('');
+      }
+      return `
+        <div class="message-item" style="padding: 12px; border-bottom: 1px solid var(--border-light);">
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+            <span class="badge" style="background: var(--bg-tertiary); color: var(--text-secondary); font-size: 10px;">${escapeHtml(role)}</span>
+            ${msg.name ? `<span style="margin-left: 6px; font-weight: 500;">${escapeHtml(msg.name)}</span>` : ''}
+          </div>
+          ${body}
+        </div>
+      `;
+    }).join('');
+    return;
+  }
+
+  // Fallback to observer events
   const messages = events.filter(e =>
     e.type?.includes('message') ||
     e.eventType?.includes('message') ||
@@ -549,10 +612,39 @@ function renderMessages(events) {
   `).join('');
 }
 
-function renderToolCalls(events) {
+function renderToolCalls(events, run) {
   const container = document.getElementById('runToolCalls');
   if (!container) return;
 
+  // Prefer run.messages tool calls over observer events
+  const runMessages = Array.isArray(run?.messages) ? run.messages : [];
+  const msgToolCalls = [];
+  runMessages.forEach(msg => {
+    if (msg.toolCalls?.length) {
+      msg.toolCalls.forEach(tc => msgToolCalls.push(tc));
+    }
+    if (msg.role === 'tool') {
+      msgToolCalls.push({ name: msg.name || 'tool', result: msg.content });
+    }
+  });
+
+  if (msgToolCalls.length > 0) {
+    container.innerHTML = msgToolCalls.map(tc => {
+      const isResult = !!tc.result;
+      return `
+        <div class="tool-call-item" style="padding: 12px; border-bottom: 1px solid var(--border-light);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="font-weight: 600;">${escapeHtml(tc.name || 'unknown')}</span>
+            <span class="badge" style="background: var(--bg-tertiary); color: var(--text-muted);">${isResult ? 'result' : 'call'}</span>
+          </div>
+          <pre class="code-block" style="margin: 0; padding: 8px; font-size: 11px;">${escapeHtml(isResult ? tc.result : JSON.stringify(tc.arguments, null, 2))}</pre>
+        </div>
+      `;
+    }).join('');
+    return;
+  }
+
+  // Fallback to observer events
   const toolCalls = events.filter(e =>
     e.type?.includes('tool') ||
     e.eventType?.includes('tool')
@@ -927,7 +1019,6 @@ async function loadWorkflows() {
     const workflowMap = new Map();
     const descriptions = {
       basic: 'Simple agent workflow',
-      'secops-static': 'Security operations workflow',
     };
 
     registryRows.forEach(item => {
@@ -1336,6 +1427,30 @@ function initCommandBar() {
 }
 
 // ===== Playground =====
+let currentInputMode = 'chat';
+
+function setInputMode(mode) {
+  currentInputMode = mode;
+  const chatMode = document.getElementById('playgroundChatMode');
+  const jsonMode = document.getElementById('playgroundJsonMode');
+  const chatBtn = document.getElementById('modeChatBtn');
+  const jsonBtn = document.getElementById('modeJsonBtn');
+  if (mode === 'json') {
+    chatMode && (chatMode.style.display = 'none');
+    jsonMode && (jsonMode.style.display = 'block');
+    chatBtn?.classList.remove('active');
+    jsonBtn?.classList.add('active');
+  } else {
+    chatMode && (chatMode.style.display = 'flex');
+    jsonMode && (jsonMode.style.display = 'none');
+    chatBtn?.classList.add('active');
+    jsonBtn?.classList.remove('active');
+  }
+}
+
+// Make setInputMode available globally for onclick handler
+window.setInputMode = setInputMode;
+
 function appendChatMessage(role, content, meta) {
   const messages = document.getElementById('chatMessages');
   if (!messages) return;
@@ -1362,6 +1477,7 @@ async function sendPlaygroundMessage() {
   const prompt = input.value.trim();
   if (!prompt) return;
 
+  const flowName = document.getElementById('playgroundFlow')?.value || '';
   const workflow = document.getElementById('playgroundWorkflow')?.value || '';
   const tools = Array.from(document.getElementById('playgroundTools')?.selectedOptions || []).map(o => o.value);
   const systemPrompt = document.getElementById('playgroundSystemPrompt')?.value?.trim() || '';
@@ -1374,6 +1490,7 @@ async function sendPlaygroundMessage() {
   try {
     const response = await api.post('/api/v1/playground/run', {
       input: prompt,
+      flow: flowName || undefined,
       workflow,
       tools,
       systemPrompt,
@@ -1412,7 +1529,450 @@ function initPlayground() {
       sendPlaygroundMessage();
     }
   });
+
+  // JSON payload mode
+  const jsonSendBtn = document.getElementById('sendJsonPayload');
+  jsonSendBtn?.addEventListener('click', sendJsonPayload);
+
+  const jsonInput = document.getElementById('jsonPayloadInput');
+  jsonInput?.addEventListener('input', validateJsonInput);
+
+  // Load graph preview when workflow changes
+  const workflowSelect = document.getElementById('playgroundWorkflow');
+  workflowSelect?.addEventListener('change', loadPlaygroundGraphPreview);
+  loadPlaygroundGraphPreview();
+
+  // Load flows and wire up selector
+  const flowSelect = document.getElementById('playgroundFlow');
+  flowSelect?.addEventListener('change', onFlowSelected);
+  loadFlows();
+  loadToolCatalog();
 }
+
+let _loadedFlows = [];
+
+async function loadFlows() {
+  const select = document.getElementById('playgroundFlow');
+  if (!select) return;
+  try {
+    const data = await api.get('/api/v1/flows');
+    const flows = Array.isArray(data?.flows) ? data.flows : [];
+    _loadedFlows = flows;
+    // Keep the (none) option, add flows
+    select.innerHTML = '<option value="">(none — configure manually)</option>';
+    flows.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.name;
+      opt.textContent = f.name;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    // Flows endpoint not available — that's OK
+  }
+}
+
+async function loadToolCatalog() {
+  const select = document.getElementById('playgroundTools');
+  if (!select) return;
+  try {
+    const data = await api.get('/api/v1/tools/catalog');
+    const bundles = Array.isArray(data?.bundles) ? data.bundles : [];
+    const tools = Array.isArray(data?.tools) ? data.tools : [];
+    select.innerHTML = '';
+
+    // Add bundles first as optgroup-style options
+    if (bundles.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Bundles';
+      bundles.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.name;
+        opt.textContent = `${b.name}  (${b.tools.length} tools)`;
+        opt.title = b.description + '\nTools: ' + b.tools.join(', ');
+        if (b.name === '@default') opt.selected = true;
+        grp.appendChild(opt);
+      });
+      select.appendChild(grp);
+    }
+
+    // Add individual tools
+    if (tools.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Individual Tools';
+      tools.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        opt.textContent = t.name;
+        opt.title = t.description;
+        grp.appendChild(opt);
+      });
+      select.appendChild(grp);
+    }
+
+    // Fallback if nothing loaded
+    if (!bundles.length && !tools.length) {
+      select.innerHTML = '<option value="@default" selected>@default</option><option value="@all">@all</option>';
+    }
+  } catch (e) {
+    // Fallback to hardcoded defaults
+    select.innerHTML = '<option value="@default" selected>@default</option><option value="@all">@all</option>';
+  }
+}
+
+function onFlowSelected() {
+  const select = document.getElementById('playgroundFlow');
+  const flowInfo = document.getElementById('playgroundFlowInfo');
+  const flowDesc = document.getElementById('playgroundFlowDesc');
+  const flowMeta = document.getElementById('playgroundFlowMeta');
+  const badge = document.getElementById('configBadge');
+  const details = document.getElementById('playgroundConfigDetails');
+  const name = select?.value || '';
+
+  if (!name) {
+    if (flowInfo) flowInfo.style.display = 'none';
+    if (badge) { badge.textContent = 'manual'; badge.className = 'config-badge'; }
+    // Reset config fields
+    const sp = document.getElementById('playgroundSystemPrompt');
+    if (sp) sp.value = '';
+    const ts = document.getElementById('playgroundTools');
+    if (ts) [...ts.options].forEach(o => { o.selected = o.value === '@default'; });
+    const ci = document.getElementById('chatInput');
+    if (ci) ci.placeholder = 'Send a message...';
+    return;
+  }
+
+  const f = _loadedFlows.find(fl => fl.name === name);
+  if (!f) return;
+
+  // Show flow info bar
+  if (flowInfo) flowInfo.style.display = 'block';
+  if (flowDesc) flowDesc.textContent = f.description || '';
+  if (flowMeta) {
+    const tags = [];
+    if (f.workflow) tags.push(`<span class="meta-tag">workflow: ${escapeHtml(f.workflow || 'basic')}</span>`);
+    if (f.tools?.length) tags.push(`<span class="meta-tag">tools: ${f.tools.map(t => escapeHtml(t)).join(', ')}</span>`);
+    flowMeta.innerHTML = tags.join('');
+  }
+
+  // Update badge
+  if (badge) {
+    badge.textContent = name;
+    badge.className = 'config-badge flow-active';
+  }
+
+  // Collapse config details since flow handles it
+  if (details) details.removeAttribute('open');
+
+  // Pre-fill config from flow defaults
+  if (f.workflow) {
+    const ws = document.getElementById('playgroundWorkflow');
+    if (ws) {
+      if (![...ws.options].some(o => o.value === f.workflow)) {
+        const opt = document.createElement('option');
+        opt.value = f.workflow;
+        opt.textContent = f.workflow;
+        ws.appendChild(opt);
+      }
+      ws.value = f.workflow;
+    }
+    loadPlaygroundGraphPreview();
+  }
+
+  if (f.systemPrompt) {
+    const sp = document.getElementById('playgroundSystemPrompt');
+    if (sp) sp.value = f.systemPrompt;
+  }
+
+  if (f.tools?.length) {
+    const ts = document.getElementById('playgroundTools');
+    if (ts) {
+      f.tools.forEach(t => {
+        if (![...ts.options].some(o => o.value === t)) {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t;
+          ts.appendChild(opt);
+        }
+      });
+      [...ts.options].forEach(o => { o.selected = f.tools.includes(o.value); });
+    }
+  }
+
+  // If flow has an input example, populate it and update placeholder
+  if (f.inputExample) {
+    if (currentInputMode === 'json') {
+      const ji = document.getElementById('jsonPayloadInput');
+      if (ji) ji.value = f.inputExample;
+      validateJsonInput();
+    } else {
+      const ci = document.getElementById('chatInput');
+      if (ci) {
+        ci.value = f.inputExample;
+        ci.placeholder = `Try: ${f.inputExample.substring(0, 60)}...`;
+      }
+    }
+  }
+}
+
+async function sendJsonPayload() {
+  const textarea = document.getElementById('jsonPayloadInput');
+  const sendBtn = document.getElementById('sendJsonPayload');
+  const resultDiv = document.getElementById('jsonResultOutput');
+  const resultContent = document.getElementById('jsonResultContent');
+  if (!textarea || !sendBtn) return;
+
+  const raw = textarea.value.trim();
+  if (!raw) return;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    document.getElementById('jsonValidation').textContent = 'Invalid JSON: ' + e.message;
+    document.getElementById('jsonValidation').className = 'json-validation error';
+    return;
+  }
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Running...';
+
+  const flowName = document.getElementById('playgroundFlow')?.value || '';
+  const workflow = document.getElementById('playgroundWorkflow')?.value || '';
+  const tools = Array.from(document.getElementById('playgroundTools')?.selectedOptions || []).map(o => o.value);
+  const systemPrompt = document.getElementById('playgroundSystemPrompt')?.value?.trim() || '';
+
+  const payload = {
+    input: typeof parsed === 'string' ? parsed : (parsed.input || JSON.stringify(parsed)),
+    flow: flowName || undefined,
+    workflow,
+    tools,
+    systemPrompt,
+  };
+
+  try {
+    const response = await api.post('/api/v1/playground/run', payload);
+    resultDiv && (resultDiv.style.display = 'block');
+    if (resultContent) {
+      resultContent.textContent = JSON.stringify(response, null, 2);
+    }
+  } catch (e) {
+    resultDiv && (resultDiv.style.display = 'block');
+    if (resultContent) {
+      resultContent.textContent = 'Error: ' + (e.message || e);
+    }
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Execute';
+  }
+}
+
+function validateJsonInput() {
+  const textarea = document.getElementById('jsonPayloadInput');
+  const validation = document.getElementById('jsonValidation');
+  if (!textarea || !validation) return;
+  const raw = textarea.value.trim();
+  if (!raw) { validation.textContent = ''; return; }
+  try {
+    JSON.parse(raw);
+    validation.textContent = '✓ Valid JSON';
+    validation.className = 'json-validation valid';
+  } catch (e) {
+    validation.textContent = '✗ ' + e.message;
+    validation.className = 'json-validation error';
+  }
+}
+
+async function loadPlaygroundGraphPreview() {
+  const workflowName = document.getElementById('playgroundWorkflow')?.value || '';
+  const previewDiv = document.getElementById('playgroundGraphPreview');
+  const canvas = document.getElementById('graphCanvas');
+  if (!previewDiv || !canvas || !workflowName) {
+    previewDiv && (previewDiv.style.display = 'none');
+    return;
+  }
+
+  try {
+    const data = await api.get(`/api/v1/workflows/${encodeURIComponent(workflowName)}/topology`);
+    const nodes = data?.nodes || [];
+    const edges = data?.edges || [];
+    if (nodes.length <= 1 && edges.length === 0) {
+      previewDiv.style.display = 'none';
+      return;
+    }
+    previewDiv.style.display = 'block';
+    drawGraphPreview(canvas, nodes, edges);
+  } catch (e) {
+    previewDiv.style.display = 'none';
+  }
+}
+
+function drawGraphPreview(canvas, nodes, edges) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 600;
+  const h = canvas.clientHeight || 200;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const colors = { agent: '#3b82f6', tool: '#10b981', router: '#f59e0b' };
+  const nodeMap = {};
+  const padding = 20;
+  const nodeW = 100, nodeH = 36;
+
+  // Scale positions to fit canvas
+  let maxX = 0, maxY = 0;
+  nodes.forEach(n => { maxX = Math.max(maxX, n.x + nodeW); maxY = Math.max(maxY, n.y + nodeH); });
+  const scaleX = maxX > 0 ? (w - padding * 2) / maxX : 1;
+  const scaleY = maxY > 0 ? (h - padding * 2) / maxY : 1;
+  const scale = Math.min(scaleX, scaleY, 1);
+
+  nodes.forEach(n => {
+    nodeMap[n.id] = { x: padding + n.x * scale, y: padding + n.y * scale, node: n };
+  });
+
+  // Draw edges
+  ctx.lineWidth = 1.5;
+  edges.forEach(e => {
+    const from = nodeMap[e.from];
+    const to = nodeMap[e.to];
+    if (!from || !to) return;
+    ctx.beginPath();
+    ctx.strokeStyle = e.conditional ? '#f59e0b' : '#6b7280';
+    if (e.conditional) ctx.setLineDash([4, 4]);
+    else ctx.setLineDash([]);
+    ctx.moveTo(from.x + nodeW * scale / 2, from.y + nodeH * scale / 2);
+    ctx.lineTo(to.x + nodeW * scale / 2, to.y + nodeH * scale / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Draw nodes
+  nodes.forEach(n => {
+    const pos = nodeMap[n.id];
+    if (!pos) return;
+    const nw = nodeW * scale, nh = nodeH * scale;
+    ctx.fillStyle = colors[n.kind] || '#6b7280';
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(pos.x, pos.y, nw, nh);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = colors[n.kind] || '#6b7280';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(pos.x, pos.y, nw, nh);
+    ctx.fillStyle = 'var(--text, #e5e7eb)';
+    ctx.font = `${Math.max(10, 12 * scale)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = colors[n.kind] || '#6b7280';
+    ctx.fillText(n.label || n.id, pos.x + nw / 2, pos.y + nh / 2);
+  });
+}
+
+// ===== Scheduler =====
+async function loadCronJobs() {
+  const list = document.getElementById('cronJobList');
+  if (!list) return;
+  try {
+    const jobs = await api.get('/api/v1/cron/jobs');
+    if (!Array.isArray(jobs) || jobs.length === 0) {
+      list.innerHTML = '<div class="empty-state"><p>No scheduled jobs yet</p></div>';
+      return;
+    }
+    list.innerHTML = jobs.map(j => `
+      <div class="cron-job-row" style="display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid var(--border-color);">
+        <div style="flex:1;">
+          <strong>${escapeHtml(j.name)}</strong>
+          <span style="margin-left:8px;font-size:12px;color:var(--text-muted);font-family:monospace;">${escapeHtml(j.cronExpr)}</span>
+          ${j.config?.workflow ? `<span class="badge">${escapeHtml(j.config.workflow)}</span>` : ''}
+          ${!j.enabled ? '<span class="badge" style="background:var(--accent-warning);color:#000;">paused</span>' : ''}
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);text-align:right;min-width:160px;">
+          <div>Runs: ${j.runCount || 0}</div>
+          ${j.lastRun ? `<div>Last: ${new Date(j.lastRun).toLocaleString()}</div>` : ''}
+          ${j.nextRun ? `<div>Next: ${new Date(j.nextRun).toLocaleString()}</div>` : ''}
+          ${j.lastError ? `<div style="color:var(--accent-danger);">${escapeHtml(j.lastError)}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;margin-left:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="triggerCronJob('${escapeHtml(j.name)}')" title="Trigger now">▶</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleCronJobEnabled('${escapeHtml(j.name)}', ${!j.enabled})" title="${j.enabled ? 'Pause' : 'Resume'}">${j.enabled ? '⏸' : '▶'}</button>
+          <button class="btn btn-secondary btn-sm" onclick="deleteCronJob('${escapeHtml(j.name)}')" title="Delete" style="color:var(--accent-danger);">✕</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="empty-state"><p>Scheduler not available</p></div>`;
+  }
+}
+
+function toggleCronForm() {
+  const form = document.getElementById('cronJobForm');
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function createCronJob() {
+  const name = document.getElementById('cronJobName')?.value?.trim();
+  const cronExpr = document.getElementById('cronJobExpr')?.value?.trim();
+  const input = document.getElementById('cronJobInput')?.value?.trim();
+  const workflow = document.getElementById('cronJobWorkflow')?.value || '';
+  const systemPrompt = document.getElementById('cronJobSystemPrompt')?.value?.trim() || '';
+  if (!name || !cronExpr || !input) {
+    alert('Name, cron expression, and input are required');
+    return;
+  }
+  try {
+    await api.post('/api/v1/cron/jobs', {
+      name,
+      cronExpr,
+      config: { input, workflow, systemPrompt, tools: ['@default'] },
+    });
+    toggleCronForm();
+    document.getElementById('cronJobName').value = '';
+    document.getElementById('cronJobExpr').value = '';
+    document.getElementById('cronJobInput').value = '';
+    document.getElementById('cronJobSystemPrompt').value = '';
+    loadCronJobs();
+  } catch (e) {
+    alert('Failed to create job: ' + (e.message || e));
+  }
+}
+
+async function triggerCronJob(name) {
+  try {
+    const resp = await api.post(`/api/v1/cron/jobs/${encodeURIComponent(name)}/trigger`, {});
+    alert(`Job triggered. Status: ${resp?.status || 'unknown'}\nOutput: ${(resp?.output || '').substring(0, 200)}`);
+    loadCronJobs();
+  } catch (e) {
+    alert('Trigger failed: ' + (e.message || e));
+  }
+}
+
+async function toggleCronJobEnabled(name, enabled) {
+  try {
+    await api.request(`/api/v1/cron/jobs/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
+    loadCronJobs();
+  } catch (e) {
+    alert('Update failed: ' + (e.message || e));
+  }
+}
+
+async function deleteCronJob(name) {
+  if (!confirm(`Delete scheduled job "${name}"?`)) return;
+  try {
+    await api.request(`/api/v1/cron/jobs/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    loadCronJobs();
+  } catch (e) {
+    alert('Delete failed: ' + (e.message || e));
+  }
+}
+
+// Make scheduler functions available globally
+window.toggleCronForm = toggleCronForm;
+window.createCronJob = createCronJob;
+window.triggerCronJob = triggerCronJob;
+window.toggleCronJobEnabled = toggleCronJobEnabled;
+window.deleteCronJob = deleteCronJob;
+window.loadCronJobs = loadCronJobs;
 
 // ===== Event Buttons =====
 function initButtons() {
@@ -1467,6 +2027,360 @@ function initSSE() {
     };
   } catch (e) {
     console.log('SSE not available');
+  }
+}
+
+// ===== Trace Tree =====
+function renderTraceTree(run, events) {
+  const container = document.getElementById('runTraceTree');
+  if (!container) return;
+
+  const messages = Array.isArray(run?.messages) ? run.messages : [];
+  if (messages.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No trace data available</p></div>';
+    return;
+  }
+
+  let stepNum = 0;
+  const steps = messages.map(msg => {
+    stepNum++;
+    const role = msg.role || 'unknown';
+    let iconClass = 'user';
+    let label = 'User Input';
+    let detail = msg.content || '';
+
+    if (role === 'assistant') {
+      iconClass = 'model';
+      label = 'Model Response';
+      if (msg.toolCalls?.length) {
+        label = `Model → ${msg.toolCalls.length} tool call(s)`;
+        detail = msg.toolCalls.map(tc =>
+          `${tc.name || 'tool'}(${JSON.stringify(tc.arguments || {})})`
+        ).join('\n');
+        if (msg.content) detail = msg.content + '\n\n' + detail;
+      }
+    } else if (role === 'tool') {
+      iconClass = 'tool-call';
+      label = `Tool Result: ${msg.name || 'tool'}`;
+    } else if (role === 'system') {
+      iconClass = 'model';
+      label = 'System Prompt';
+    }
+
+    return `
+      <div class="trace-node">
+        <div class="trace-step" onclick="this.querySelector('.trace-step-detail')?.classList.toggle('expanded')">
+          <div class="trace-step-icon ${iconClass}">${stepNum}</div>
+          <div class="trace-step-info">
+            <div class="trace-step-title">${escapeHtml(label)}</div>
+            <div class="trace-step-detail">${escapeHtml(truncate(detail, 200))}</div>
+          </div>
+          <div class="trace-step-meta">${role}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  // Add run summary at top
+  const dur = run.durationMs || run.duration || '';
+  const provider = run.provider || '';
+  const summary = `
+    <div style="margin-bottom:12px; padding:10px; background:var(--bg-tertiary); border-radius:6px; font-size:12px;">
+      <strong>Run:</strong> ${escapeHtml(truncate(run.id || '', 24))}
+      ${provider ? ` • <strong>Provider:</strong> ${escapeHtml(provider)}` : ''}
+      ${dur ? ` • <strong>Duration:</strong> ${dur}ms` : ''}
+      • <strong>Steps:</strong> ${messages.length}
+    </div>
+  `;
+
+  container.innerHTML = summary + steps.join('');
+}
+
+// ===== Actions Tab =====
+let actionsCache = [];
+let selectedAction = null;
+let actionsTypeFilter = 'all';
+
+async function loadActions() {
+  try {
+    const resp = await api.get('/api/v1/reflect');
+    actionsCache = Array.isArray(resp?.actions) ? resp.actions : [];
+    renderActionsList();
+  } catch (e) {
+    console.error('Failed to load actions:', e);
+    document.getElementById('actionsList').innerHTML =
+      '<div class="empty-state"><p>Failed to load actions</p></div>';
+  }
+}
+
+function renderActionsList() {
+  const container = document.getElementById('actionsList');
+  if (!container) return;
+
+  const search = (document.getElementById('actionsSearch')?.value || '').toLowerCase();
+  const filtered = actionsCache.filter(a => {
+    if (actionsTypeFilter !== 'all' && a.type !== actionsTypeFilter) return false;
+    if (search && !a.name.toLowerCase().includes(search) && !(a.description || '').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No matching actions</p></div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(a => `
+    <div class="action-item ${selectedAction?.key === a.key ? 'selected' : ''}"
+         data-key="${escapeHtml(a.key)}" onclick="selectAction('${escapeHtml(a.key)}')">
+      <span class="action-type-badge ${a.type}">${a.type}</span>
+      <div class="action-item-info">
+        <div class="action-item-name">${escapeHtml(a.name)}</div>
+        <div class="action-item-desc">${escapeHtml(a.description || '')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function filterActions() {
+  renderActionsList();
+}
+
+function filterActionsByType(type) {
+  actionsTypeFilter = type;
+  document.querySelectorAll('#actionsTypeFilter .toggle-btn').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-type') === type);
+  });
+  renderActionsList();
+}
+
+function selectAction(key) {
+  selectedAction = actionsCache.find(a => a.key === key);
+  if (!selectedAction) return;
+
+  renderActionsList(); // Update selection highlight
+
+  document.getElementById('actionsEmptyDetail').style.display = 'none';
+  document.getElementById('actionDetail').style.display = 'block';
+
+  // Header
+  document.getElementById('actionDetailType').textContent = selectedAction.type;
+  document.getElementById('actionDetailType').className = 'action-type-badge ' + selectedAction.type;
+  document.getElementById('actionDetailName').textContent = selectedAction.name;
+  document.getElementById('actionDetailDesc').textContent = selectedAction.description || '';
+
+  // Schema display
+  const schema = selectedAction.inputSchema;
+  document.getElementById('actionSchemaRaw').textContent = schema
+    ? JSON.stringify(schema, null, 2)
+    : 'No schema defined';
+
+  // Generate form
+  renderSchemaForm(schema);
+
+  // Reset result
+  document.getElementById('actionResultCard').style.display = 'none';
+  document.getElementById('actionTraceCard').style.display = 'none';
+
+  // Pre-fill JSON editor
+  if (schema?.properties) {
+    const example = {};
+    const props = schema.properties;
+    for (const [k, v] of Object.entries(props)) {
+      if (v.type === 'string') example[k] = selectedAction.metadata?.inputExample || '';
+      else if (v.type === 'number') example[k] = 0;
+      else if (v.type === 'boolean') example[k] = false;
+      else example[k] = '';
+    }
+    document.getElementById('actionJsonInput').value = JSON.stringify(example, null, 2);
+  } else {
+    document.getElementById('actionJsonInput').value = '{}';
+  }
+}
+
+function renderSchemaForm(schema) {
+  const container = document.getElementById('actionFormFields');
+  if (!container) return;
+
+  if (!schema?.properties) {
+    container.innerHTML = `
+      <div class="schema-field">
+        <label>input <span class="field-type">string</span></label>
+        <textarea class="textarea" data-field="input" rows="4" placeholder="Enter input..."></textarea>
+      </div>
+    `;
+    return;
+  }
+
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  const props = schema.properties;
+  const html = [];
+
+  for (const [fieldName, fieldDef] of Object.entries(props)) {
+    const isRequired = required.includes(fieldName);
+    const fieldType = fieldDef.type || 'string';
+    const desc = fieldDef.description || '';
+    const enumVals = fieldDef.enum;
+
+    let inputHtml = '';
+    if (enumVals) {
+      inputHtml = `<select class="select" data-field="${escapeHtml(fieldName)}">
+        <option value="">-- select --</option>
+        ${enumVals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('')}
+      </select>`;
+    } else if (fieldType === 'boolean') {
+      inputHtml = `<select class="select" data-field="${escapeHtml(fieldName)}">
+        <option value="">-- select --</option>
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>`;
+    } else if (fieldType === 'number' || fieldType === 'integer') {
+      inputHtml = `<input class="input" data-field="${escapeHtml(fieldName)}" type="number" placeholder="0" />`;
+    } else if (fieldType === 'string' && (fieldName === 'input' || fieldName === 'content' || fieldName === 'data' || fieldName === 'text')) {
+      inputHtml = `<textarea class="textarea" data-field="${escapeHtml(fieldName)}" rows="4" placeholder="Enter ${escapeHtml(fieldName)}..."></textarea>`;
+    } else {
+      inputHtml = `<input class="input" data-field="${escapeHtml(fieldName)}" type="text" placeholder="Enter ${escapeHtml(fieldName)}..." />`;
+    }
+
+    html.push(`
+      <div class="schema-field">
+        <label>
+          ${escapeHtml(fieldName)}
+          <span class="field-type">${escapeHtml(fieldType)}</span>
+          ${isRequired ? '<span class="field-required">required</span>' : ''}
+        </label>
+        ${desc ? `<div class="field-desc">${escapeHtml(desc)}</div>` : ''}
+        ${inputHtml}
+      </div>
+    `);
+  }
+
+  container.innerHTML = html.join('');
+}
+
+function setActionInputMode(mode) {
+  const formBtn = document.getElementById('actionFormModeBtn');
+  const jsonBtn = document.getElementById('actionJsonModeBtn');
+  const formFields = document.getElementById('actionFormFields');
+  const jsonEditor = document.getElementById('actionJsonEditor');
+  if (mode === 'form') {
+    formBtn?.classList.add('active');
+    jsonBtn?.classList.remove('active');
+    if (formFields) formFields.style.display = '';
+    if (jsonEditor) jsonEditor.style.display = 'none';
+  } else {
+    formBtn?.classList.remove('active');
+    jsonBtn?.classList.add('active');
+    if (formFields) formFields.style.display = 'none';
+    if (jsonEditor) jsonEditor.style.display = '';
+  }
+}
+
+function collectFormInput() {
+  const fields = document.querySelectorAll('#actionFormFields [data-field]');
+  const input = {};
+  fields.forEach(f => {
+    const name = f.getAttribute('data-field');
+    let val = f.value;
+    if (f.type === 'number' && val !== '') val = Number(val);
+    if (f.tagName === 'SELECT' && val === 'true') val = true;
+    if (f.tagName === 'SELECT' && val === 'false') val = false;
+    if (val !== '' && val !== null) input[name] = val;
+  });
+  return input;
+}
+
+async function runAction() {
+  if (!selectedAction) return;
+
+  const btn = document.getElementById('runActionBtn');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+
+  // Determine input based on mode
+  const jsonEditor = document.getElementById('actionJsonEditor');
+  const isJsonMode = jsonEditor && jsonEditor.style.display !== 'none';
+  let input;
+  if (isJsonMode) {
+    try {
+      input = JSON.parse(document.getElementById('actionJsonInput').value);
+    } catch (e) {
+      alert('Invalid JSON: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = 'Run';
+      return;
+    }
+  } else {
+    input = collectFormInput();
+  }
+
+  try {
+    const resp = await api.post('/api/v1/actions/run', {
+      key: selectedAction.key,
+      input: input,
+    });
+
+    // Show result
+    const card = document.getElementById('actionResultCard');
+    card.style.display = '';
+
+    const statusEl = document.getElementById('actionResultStatus');
+    statusEl.textContent = resp.status || 'unknown';
+    statusEl.className = 'status-badge badge status-' + (resp.status === 'success' || resp.status === 'completed' ? 'completed' : 'failed');
+
+    document.getElementById('actionResultDuration').textContent =
+      resp.duration ? `${resp.duration}ms` : '';
+
+    const output = resp.error || resp.output;
+    document.getElementById('actionResultOutput').textContent =
+      typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+
+    // Show trace for flow runs
+    if (resp.runId) {
+      const traceCard = document.getElementById('actionTraceCard');
+      traceCard.style.display = '';
+      try {
+        const run = await api.get(`/api/v1/runs/${resp.runId}`);
+        const traceContainer = document.getElementById('actionTraceContent');
+        const messages = Array.isArray(run?.messages) ? run.messages : [];
+        if (messages.length > 0) {
+          let stepNum = 0;
+          traceContainer.innerHTML = messages.map(msg => {
+            stepNum++;
+            const role = msg.role || 'unknown';
+            let iconClass = role === 'assistant' ? 'model' : (role === 'tool' ? 'tool-call' : 'user');
+            let label = role === 'assistant' ? 'Model' : (role === 'tool' ? `Tool: ${msg.name || ''}` : 'User');
+            let detail = msg.content || '';
+            if (msg.toolCalls?.length) {
+              label += ` → ${msg.toolCalls.length} call(s)`;
+              detail = msg.toolCalls.map(tc => `${tc.name}(${JSON.stringify(tc.arguments || {})})`).join('\n');
+            }
+            return `<div class="trace-node">
+              <div class="trace-step" onclick="this.querySelector('.trace-step-detail')?.classList.toggle('expanded')">
+                <div class="trace-step-icon ${iconClass}">${stepNum}</div>
+                <div class="trace-step-info">
+                  <div class="trace-step-title">${escapeHtml(label)}</div>
+                  <div class="trace-step-detail">${escapeHtml(truncate(detail, 200))}</div>
+                </div>
+                <div class="trace-step-meta">${role}</div>
+              </div>
+            </div>`;
+          }).join('');
+        } else {
+          traceContainer.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">No trace steps</p>';
+        }
+      } catch (e) {
+        document.getElementById('actionTraceContent').textContent = 'Failed to load trace: ' + e.message;
+      }
+    }
+  } catch (e) {
+    const card = document.getElementById('actionResultCard');
+    card.style.display = '';
+    document.getElementById('actionResultStatus').textContent = 'error';
+    document.getElementById('actionResultStatus').className = 'status-badge badge status-failed';
+    document.getElementById('actionResultOutput').textContent = e.message || String(e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="5,3 19,12 5,21"/></svg> Run`;
   }
 }
 

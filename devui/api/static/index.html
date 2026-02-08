@@ -50,6 +50,12 @@
             </svg>
             <span>Playground</span>
           </button>
+          <button class="nav-item" data-tab="actions" title="Actions">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            <span>Actions</span>
+          </button>
           <button class="nav-item" data-tab="workflows" title="Graphs">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="5" cy="12" r="2"/>
@@ -79,6 +85,13 @@
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
             </svg>
             <span>Audit</span>
+          </button>
+          <button class="nav-item" data-tab="scheduler" title="Scheduler">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>Scheduler</span>
           </button>
         </nav>
 
@@ -261,6 +274,7 @@
               </div>
               <div class="run-tabs">
                 <button class="run-tab active" data-run-tab="overview">Overview</button>
+                <button class="run-tab" data-run-tab="trace">Trace</button>
                 <button class="run-tab" data-run-tab="timeline">Timeline</button>
                 <button class="run-tab" data-run-tab="messages">Messages</button>
                 <button class="run-tab" data-run-tab="tools">Tool Calls</button>
@@ -298,6 +312,11 @@
                     </div>
                   </div>
                 </div>
+                <div id="run-trace" class="run-panel">
+                  <div class="trace-tree" id="runTraceTree">
+                    <div class="empty-state"><p>Select a run to view its execution trace.</p></div>
+                  </div>
+                </div>
                 <div id="run-timeline" class="run-panel">
                   <div class="cognitive-metrics" id="runCognitiveMetrics"></div>
                   <div class="attempt-lane" id="runAttemptLane"></div>
@@ -318,31 +337,58 @@
         <section id="tab-playground" class="tab">
           <div class="page-header">
             <h1>Playground</h1>
-            <p class="page-subtitle">Test your agents interactively</p>
+            <p class="page-subtitle">Select an agent flow and test it interactively</p>
+          </div>
+
+          <!-- Flow Picker Bar -->
+          <div class="playground-flow-bar">
+            <div class="flow-picker">
+              <label>Agent Flow</label>
+              <select id="playgroundFlow" class="select">
+                <option value="">(none — configure manually)</option>
+              </select>
+            </div>
+            <div class="flow-info" id="playgroundFlowInfo" style="display:none;">
+              <div class="flow-desc" id="playgroundFlowDesc"></div>
+              <div class="flow-meta" id="playgroundFlowMeta"></div>
+            </div>
           </div>
 
           <div class="playground-container">
             <div class="playground-config">
-              <div class="config-group">
-                <label>Workflow</label>
-                <select id="playgroundWorkflow" class="select">
-                  <option value="basic">basic</option>
-                </select>
+              <details class="config-details" id="playgroundConfigDetails">
+                <summary>Agent Configuration <span class="config-badge" id="configBadge">manual</span></summary>
+                <div class="config-group">
+                  <label>Workflow</label>
+                  <select id="playgroundWorkflow" class="select">
+                    <option value="basic">basic</option>
+                  </select>
+                </div>
+                <div class="config-group">
+                  <label>Tools</label>
+                  <select id="playgroundTools" class="select" multiple size="6">
+                  </select>
+                  <small style="color:var(--text-muted);font-size:11px;">Hold Ctrl/Cmd to select multiple</small>
+                </div>
+                <div class="config-group">
+                  <label>System Prompt</label>
+                  <textarea id="playgroundSystemPrompt" class="textarea" rows="3" placeholder="Optional system prompt..."></textarea>
+                </div>
+              </details>
+              <div class="config-group" style="margin-top:8px;">
+                <label>Input Mode</label>
+                <div class="toggle-group">
+                  <button class="toggle-btn active" id="modeChatBtn" onclick="setInputMode('chat')">Chat</button>
+                  <button class="toggle-btn" id="modeJsonBtn" onclick="setInputMode('json')">JSON Payload</button>
+                </div>
               </div>
-              <div class="config-group">
-                <label>Tools</label>
-                <select id="playgroundTools" class="select" multiple>
-                  <option value="@default" selected>@default</option>
-                  <option value="@all">@all</option>
-                </select>
-              </div>
-              <div class="config-group">
-                <label>System Prompt</label>
-                <textarea id="playgroundSystemPrompt" class="textarea" rows="3" placeholder="Optional system prompt..."></textarea>
+              <div id="playgroundGraphPreview" class="config-group graph-preview" style="display:none;">
+                <label>Graph Topology</label>
+                <canvas id="graphCanvas" width="600" height="200"></canvas>
               </div>
             </div>
 
-            <div class="playground-chat">
+            <div class="playground-chat" id="playgroundChatMode">
               <div class="chat-messages" id="chatMessages">
                 <div class="chat-welcome">
                   <div class="welcome-icon">
@@ -351,7 +397,7 @@
                     </svg>
                   </div>
                   <h3>Start a conversation</h3>
-                  <p>Type a message below to interact with your agent</p>
+                  <p>Select an agent flow above, or configure manually, then type a message.</p>
                 </div>
               </div>
               <div class="chat-input-container">
@@ -361,6 +407,121 @@
                     <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
                   </svg>
                 </button>
+              </div>
+            </div>
+
+            <div class="playground-json" id="playgroundJsonMode" style="display:none;">
+              <div class="json-editor-container">
+                <label>JSON Input Payload</label>
+                <textarea id="jsonPayloadInput" class="textarea json-editor" rows="12" placeholder='{"input": "your prompt here", "data": {}}'></textarea>
+                <div id="jsonValidation" class="json-validation"></div>
+              </div>
+              <button class="btn btn-primary" id="sendJsonPayload" style="margin-top:8px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                Execute
+              </button>
+              <div id="jsonResultOutput" class="json-result" style="display:none;">
+                <label>Output</label>
+                <pre id="jsonResultContent" class="json-output"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Actions Tab (Genkit-style) -->
+        <section id="tab-actions" class="tab">
+          <div class="page-header">
+            <h1>Actions</h1>
+            <p class="page-subtitle">Browse, inspect, and run individual tools and flows — like Genkit's action runner</p>
+            <div class="header-actions">
+              <button class="btn btn-secondary" onclick="loadActions()">Refresh</button>
+            </div>
+          </div>
+
+          <div class="actions-layout">
+            <!-- Left: Action List -->
+            <div class="actions-list-panel">
+              <div class="actions-filter">
+                <input id="actionsSearch" class="input" placeholder="Filter actions..." oninput="filterActions()" />
+                <div class="actions-type-filter" id="actionsTypeFilter">
+                  <button class="toggle-btn active" data-type="all" onclick="filterActionsByType('all')">All</button>
+                  <button class="toggle-btn" data-type="flow" onclick="filterActionsByType('flow')">Flows</button>
+                  <button class="toggle-btn" data-type="tool" onclick="filterActionsByType('tool')">Tools</button>
+                  <button class="toggle-btn" data-type="workflow" onclick="filterActionsByType('workflow')">Workflows</button>
+                </div>
+              </div>
+              <div class="actions-list" id="actionsList">
+                <div class="empty-state"><p>Loading actions…</p></div>
+              </div>
+            </div>
+
+            <!-- Right: Action Detail + Run -->
+            <div class="actions-detail-panel" id="actionsDetailPanel">
+              <div class="empty-state" id="actionsEmptyDetail">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                <h3>Select an action</h3>
+                <p>Choose a tool or flow from the list to inspect its schema and run it.</p>
+              </div>
+
+              <div id="actionDetail" style="display:none;">
+                <div class="action-header">
+                  <span class="action-type-badge" id="actionDetailType"></span>
+                  <h2 id="actionDetailName"></h2>
+                  <p id="actionDetailDesc" class="page-subtitle"></p>
+                </div>
+
+                <!-- Schema Info -->
+                <div class="card" style="margin-bottom:16px;">
+                  <div class="card-header"><h3>Input Schema</h3></div>
+                  <div class="card-body" id="actionSchemaInfo">
+                    <pre id="actionSchemaRaw" class="json-output" style="max-height:200px;overflow:auto;font-size:12px;"></pre>
+                  </div>
+                </div>
+
+                <!-- Auto-generated Input Form -->
+                <div class="card" style="margin-bottom:16px;">
+                  <div class="card-header">
+                    <h3>Input</h3>
+                    <div class="toggle-group" style="margin-left:auto;">
+                      <button class="toggle-btn active" id="actionFormModeBtn" onclick="setActionInputMode('form')">Form</button>
+                      <button class="toggle-btn" id="actionJsonModeBtn" onclick="setActionInputMode('json')">JSON</button>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div id="actionFormFields"></div>
+                    <div id="actionJsonEditor" style="display:none;">
+                      <textarea id="actionJsonInput" class="textarea json-editor" rows="8" placeholder="{}"></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="runAction()" style="margin-top:12px;" id="runActionBtn">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <polygon points="5,3 19,12 5,21"/>
+                      </svg>
+                      Run
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Result -->
+                <div class="card" id="actionResultCard" style="display:none;">
+                  <div class="card-header">
+                    <h3>Result</h3>
+                    <span class="status-badge" id="actionResultStatus"></span>
+                    <span style="margin-left:auto;font-size:12px;color:var(--text-muted);" id="actionResultDuration"></span>
+                  </div>
+                  <div class="card-body">
+                    <pre id="actionResultOutput" class="json-output" style="max-height:400px;overflow:auto;"></pre>
+                  </div>
+                </div>
+
+                <!-- Trace / History -->
+                <div class="card" id="actionTraceCard" style="display:none;margin-top:16px;">
+                  <div class="card-header"><h3>Execution Trace</h3></div>
+                  <div class="card-body" id="actionTraceContent"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -580,6 +741,59 @@
             </div>
             <div class="audit-log" id="auditLogList">
               <div class="empty-state"><p>Loading audit events...</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scheduler Tab -->
+        <section id="tab-scheduler" class="tab">
+          <div class="page-header">
+            <h1>Scheduler</h1>
+            <p class="page-subtitle">Manage recurring agent tasks</p>
+            <div class="header-actions">
+              <button class="btn btn-secondary" id="refreshCronJobs" onclick="loadCronJobs()">Refresh</button>
+              <button class="btn btn-primary" id="showAddCronJob" onclick="toggleCronForm()">+ Add Job</button>
+            </div>
+          </div>
+
+          <div id="cronJobForm" class="card" style="display:none; margin-bottom:20px;">
+            <div class="card-header"><h3>New Scheduled Job</h3></div>
+            <div class="card-body" style="padding:16px;">
+              <div class="config-group">
+                <label>Job Name</label>
+                <input id="cronJobName" class="input" placeholder="my-daily-report" />
+              </div>
+              <div class="config-group">
+                <label>Cron Expression</label>
+                <input id="cronJobExpr" class="input" placeholder="0 9 * * *" />
+                <small style="color:var(--text-muted);font-size:11px;">Format: min hour day month weekday (e.g., "0 9 * * *" = daily at 9am)</small>
+              </div>
+              <div class="config-group">
+                <label>Workflow</label>
+                <select id="cronJobWorkflow" class="select">
+                  <option value="">None (direct agent)</option>
+                  <option value="basic">basic</option>
+                </select>
+              </div>
+              <div class="config-group">
+                <label>Input Prompt</label>
+                <textarea id="cronJobInput" class="textarea" rows="3" placeholder="Agent input prompt..."></textarea>
+              </div>
+              <div class="config-group">
+                <label>System Prompt (optional)</label>
+                <textarea id="cronJobSystemPrompt" class="textarea" rows="2" placeholder="Optional system prompt override..."></textarea>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:12px;">
+                <button class="btn btn-primary" onclick="createCronJob()">Create</button>
+                <button class="btn btn-secondary" onclick="toggleCronForm()">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3>Scheduled Jobs</h3></div>
+            <div id="cronJobList" class="card-body">
+              <div class="empty-state"><p>No scheduled jobs yet</p></div>
             </div>
           </div>
         </section>

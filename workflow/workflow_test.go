@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/secops"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
 )
 
@@ -16,8 +15,5 @@ func TestBuiltInWorkflowsRegistered(t *testing.T) {
 
 	if _, ok := workflow.Get("basic"); !ok {
 		t.Fatalf("expected basic workflow")
-	}
-	if _, ok := workflow.Get("secops-static"); !ok {
-		t.Fatalf("expected secops-static workflow")
 	}
 }

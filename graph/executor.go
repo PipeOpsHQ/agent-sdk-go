@@ -20,6 +20,14 @@ type Executor struct {
 	mode      ExecutionMode
 }
 
+// Graph returns the underlying graph for introspection.
+func (e *Executor) Graph() *Graph {
+	if e == nil {
+		return nil
+	}
+	return e.graph
+}
+
 type ExecutionMode string
 
 const (

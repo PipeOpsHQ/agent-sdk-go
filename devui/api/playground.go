@@ -4,6 +4,7 @@ import "context"
 
 type PlaygroundRequest struct {
 	Input        string   `json:"input"`
+	Flow         string   `json:"flow,omitempty"`
 	Workflow     string   `json:"workflow,omitempty"`
 	WorkflowFile string   `json:"workflowFile,omitempty"`
 	Tools        []string `json:"tools,omitempty"`

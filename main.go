@@ -20,13 +20,16 @@ import (
 	devuiauth "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
 	authsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth/sqlite"
 	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
 	basicgraph "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
 	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue/redisstreams"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
 	statefactory "github.com/PipeOpsHQ/agent-sdk-go/framework/state/factory"
@@ -327,6 +330,21 @@ func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.Playground
 		return devuiapi.PlaygroundResponse{}, fmt.Errorf("provider setup failed: %w", err)
 	}
 
+	// Resolve flow defaults — request fields override flow defaults.
+	if name := strings.TrimSpace(req.Flow); name != "" {
+		if f, ok := flow.Get(name); ok {
+			if strings.TrimSpace(req.Workflow) == "" {
+				req.Workflow = f.Workflow
+			}
+			if len(req.Tools) == 0 {
+				req.Tools = f.Tools
+			}
+			if strings.TrimSpace(req.SystemPrompt) == "" {
+				req.SystemPrompt = f.SystemPrompt
+			}
+		}
+	}
+
 	opts := cliOptions{
 		workflow:     strings.TrimSpace(req.Workflow),
 		tools:        append([]string(nil), req.Tools...),
@@ -373,6 +391,9 @@ func runUI(ctx context.Context, args []string, remoteMode bool) {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Register built-in flows so the Playground has example flows to choose from.
+	flow.RegisterBuiltins()
+
 	var store state.Store
 	var err error
 	store, err = statefactory.FromEnv(ctx)
@@ -416,8 +437,13 @@ func runUI(ctx context.Context, args []string, remoteMode bool) {
 		defer func() { _ = closer.Close() }()
 	}
 
-	runtimeService, closeRuntime := buildRuntimeService(ctx, store, opts)
+	rtComponents, closeRuntime := buildRuntimeService(ctx, store, opts)
 	defer closeRuntime()
+
+	var runtimeService devuiapi.RuntimeService
+	if rtComponents != nil {
+		runtimeService = rtComponents.service
+	}
 
 	observer := observe.Sink(observe.NoopSink{})
 	if traceStore != nil {
@@ -428,6 +454,67 @@ func runUI(ctx context.Context, args []string, remoteMode bool) {
 		defer async.Close()
 	}
 
+	playground := &localPlaygroundRunner{store: store, observer: observer}
+
+	// Start an inline worker that processes queued runs using the playground runner.
+	if rtComponents != nil {
+		processor := func(ctx context.Context, task queue.Task) (distributed.ProcessResult, error) {
+			resp, err := playground.Run(ctx, devuiapi.PlaygroundRequest{
+				Input:        task.Input,
+				Workflow:     task.Workflow,
+				Tools:        task.Tools,
+				SystemPrompt: task.SystemPrompt,
+			})
+			if err != nil {
+				return distributed.ProcessResult{}, err
+			}
+			return distributed.ProcessResult{Output: resp.Output, Provider: resp.Provider}, nil
+		}
+
+		inlineWorker, wErr := distributed.NewWorker(
+			distributed.WorkerConfig{WorkerID: "devui-inline", Capacity: 2},
+			store,
+			rtComponents.attemptStore,
+			rtComponents.queue,
+			observer,
+			distributed.DefaultRuntimePolicy(),
+			processor,
+		)
+		if wErr != nil {
+			log.Printf("inline worker unavailable: %v", wErr)
+		} else {
+			go func() {
+				if err := inlineWorker.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+					log.Printf("inline worker stopped: %v", err)
+				}
+			}()
+			defer func() { _ = inlineWorker.Stop(context.Background()) }()
+			log.Println("inline worker started (capacity=2)")
+		}
+	}
+
+	// Create cron scheduler that delegates to the playground runner.
+	scheduler := cronpkg.New(func(cfg cronpkg.JobConfig) (string, error) {
+		resp, err := playground.Run(ctx, devuiapi.PlaygroundRequest{
+			Input:        cfg.Input,
+			Workflow:     cfg.Workflow,
+			Tools:        cfg.Tools,
+			SystemPrompt: cfg.SystemPrompt,
+		})
+		if err != nil {
+			return "", err
+		}
+		return resp.Output, nil
+	})
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	// Register cron_manager as a tool so agents can manage scheduled jobs.
+	_ = tools.RegisterTool("cron_manager",
+		"Manage cron-scheduled agent jobs: list, add, remove, trigger, enable, disable recurring tasks.",
+		func() tools.Tool { return tools.NewCronManager(scheduler) },
+	)
+
 	server := devuiapi.NewServer(devuiapi.Config{
 		Addr:             opts.addr,
 		StateStore:       store,
@@ -436,7 +523,8 @@ func runUI(ctx context.Context, args []string, remoteMode bool) {
 		AuthStore:        authStore,
 		AuditStore:       auditStore,
 		Runtime:          runtimeService,
-		Playground:       &localPlaygroundRunner{store: store, observer: observer},
+		Playground:       playground,
+		Scheduler:        scheduler,
 		RequireAPIKey:    opts.requireAPIKey,
 		AllowLocalNoAuth: opts.allowLocalNoAuth,
 	})
@@ -570,7 +658,13 @@ func openBrowser(target string) {
 	}
 }
 
-func buildRuntimeService(ctx context.Context, store state.Store, opts uiOptions) (devuiapi.RuntimeService, func()) {
+type runtimeComponents struct {
+	service      devuiapi.RuntimeService
+	attemptStore distributed.AttemptStore
+	queue        *redisstreams.Queue
+}
+
+func buildRuntimeService(ctx context.Context, store state.Store, opts uiOptions) (*runtimeComponents, func()) {
 	if store == nil {
 		return nil, func() {}
 	}
@@ -618,7 +712,11 @@ func buildRuntimeService(ctx context.Context, store state.Store, opts uiOptions)
 		log.Printf("runtime bootstrap claim warning: %v", claimErr)
 	}
 
-	return service, func() {
+	return &runtimeComponents{
+		service:      service,
+		attemptStore: attemptStore,
+		queue:        queueStore,
+	}, func() {
 		_ = queueStore.Close()
 		_ = attemptStore.Close()
 	}

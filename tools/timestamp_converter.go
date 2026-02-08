@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,12 +22,12 @@ func NewTimestampConverter() Tool {
 		"properties": map[string]any{
 			"input": map[string]any{
 				"type":        "string",
-				"description": "The timestamp to convert. Can be a Unix timestamp (seconds or milliseconds) or a date string.",
+				"description": "The timestamp to convert, or \"now\" to get the current time. Can be a Unix timestamp (seconds or milliseconds) or a date string.",
 			},
 			"fromType": map[string]any{
 				"type":        "string",
 				"enum":        []string{"unix", "unix_ms", "rfc3339", "iso8601", "date"},
-				"description": "The format of the input: unix (seconds), unix_ms (milliseconds), rfc3339, iso8601, or date (YYYY-MM-DD).",
+				"description": "The format of the input: unix (seconds), unix_ms (milliseconds), rfc3339, iso8601, or date (YYYY-MM-DD). Not required when input is \"now\".",
 			},
 			"toType": map[string]any{
 				"type":        "string",
@@ -38,7 +39,7 @@ func NewTimestampConverter() Tool {
 				"description": "Timezone for output (e.g., 'America/New_York', 'UTC'). Defaults to UTC.",
 			},
 		},
-		"required": []string{"input", "fromType"},
+		"required": []string{"input"},
 	}
 
 	return NewFuncTool(
@@ -52,6 +53,26 @@ func NewTimestampConverter() Tool {
 			}
 			if in.Input == "" {
 				return nil, fmt.Errorf("input is required")
+			}
+
+			// Handle "now" — return current time
+			if strings.EqualFold(in.Input, "now") {
+				result, err := Now(in.Timezone)
+				if err != nil {
+					return map[string]any{"error": err.Error()}, nil
+				}
+				if in.ToType != "" {
+					loc := time.UTC
+					if in.Timezone != "" {
+						loc, _ = time.LoadLocation(in.Timezone)
+					}
+					return formatTimestamp(time.Now().In(loc), in.ToType), nil
+				}
+				return result, nil
+			}
+
+			if in.FromType == "" {
+				return nil, fmt.Errorf("fromType is required when input is not \"now\"")
 			}
 
 			// Parse input to time.Time

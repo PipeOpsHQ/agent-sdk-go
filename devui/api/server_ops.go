@@ -15,6 +15,8 @@ import (
 	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
 )
 
 type interventionRequest struct {
@@ -519,6 +521,13 @@ func (s *Server) applyIntervention(ctx context.Context, p principal, runID strin
 	return entry, nil
 }
 
+// noopRunner is a stub AgentRunner used only for graph introspection.
+type noopRunner struct{}
+
+func (noopRunner) RunDetailed(_ context.Context, _ string) (types.RunResult, error) {
+	return types.RunResult{}, fmt.Errorf("noop runner: not for execution")
+}
+
 func (s *Server) workflowTopology(ctx context.Context, workflowName string) map[string]any {
 	type node struct {
 		ID           string  `json:"id"`
@@ -531,43 +540,44 @@ func (s *Server) workflowTopology(ctx context.Context, workflowName string) map[
 		AvgLatencyMs int     `json:"avgLatencyMs"`
 	}
 	type edge struct {
-		From string `json:"from"`
-		To   string `json:"to"`
+		From        string `json:"from"`
+		To          string `json:"to"`
+		Conditional bool   `json:"conditional,omitempty"`
 	}
 	nodes := []node{}
 	edges := []edge{}
-	switch strings.TrimSpace(workflowName) {
-	case "basic":
-		nodes = []node{
-			{ID: "prepare", Label: "Prepare", Kind: "tool", X: 80, Y: 120},
-			{ID: "assistant", Label: "Assistant", Kind: "agent", X: 320, Y: 120},
-			{ID: "finalize", Label: "Finalize", Kind: "tool", X: 560, Y: 120},
+
+	// Try to dynamically extract topology from the workflow registry.
+	if b, ok := workflow.Get(workflowName); ok {
+		exec, err := b.NewExecutor(noopRunner{}, nil, "")
+		if err == nil && exec != nil {
+			g := exec.Graph()
+			if g != nil {
+				nodeInfos := g.NodeInfos()
+				edgeInfos := g.EdgeInfos()
+
+				// Auto-layout: arrange nodes left-to-right using topological hints.
+				xStep := 240
+				for i, ni := range nodeInfos {
+					label := strings.ReplaceAll(ni.ID, "_", " ")
+					label = strings.Title(label)
+					nodes = append(nodes, node{
+						ID:    ni.ID,
+						Label: label,
+						Kind:  ni.Kind,
+						X:     80 + i*xStep,
+						Y:     120,
+					})
+				}
+				for _, ei := range edgeInfos {
+					edges = append(edges, edge{From: ei.From, To: ei.To, Conditional: ei.Conditional})
+				}
+			}
 		}
-		edges = []edge{{From: "prepare", To: "assistant"}, {From: "assistant", To: "finalize"}}
-	case "secops-static":
-		nodes = []node{
-			{ID: "route", Label: "Route", Kind: "router", X: 70, Y: 170},
-			{ID: "parse_trivy", Label: "Parse Trivy", Kind: "tool", X: 260, Y: 60},
-			{ID: "build_trivy_prompt", Label: "Build Trivy Prompt", Kind: "tool", X: 450, Y: 60},
-			{ID: "assistant_trivy", Label: "Assistant Trivy", Kind: "agent", X: 650, Y: 60},
-			{ID: "redact_logs", Label: "Redact Logs", Kind: "tool", X: 260, Y: 280},
-			{ID: "classify_logs", Label: "Classify Logs", Kind: "tool", X: 450, Y: 280},
-			{ID: "build_logs_prompt", Label: "Build Logs Prompt", Kind: "tool", X: 650, Y: 280},
-			{ID: "assistant_logs", Label: "Assistant Logs", Kind: "agent", X: 840, Y: 280},
-			{ID: "finalize", Label: "Finalize", Kind: "tool", X: 1030, Y: 170},
-		}
-		edges = []edge{
-			{From: "route", To: "parse_trivy"},
-			{From: "route", To: "redact_logs"},
-			{From: "parse_trivy", To: "build_trivy_prompt"},
-			{From: "build_trivy_prompt", To: "assistant_trivy"},
-			{From: "assistant_trivy", To: "finalize"},
-			{From: "redact_logs", To: "classify_logs"},
-			{From: "classify_logs", To: "build_logs_prompt"},
-			{From: "build_logs_prompt", To: "assistant_logs"},
-			{From: "assistant_logs", To: "finalize"},
-		}
-	default:
+	}
+
+	// Fallback: single agent node if no topology was extracted.
+	if len(nodes) == 0 {
 		nodes = []node{{ID: "agent", Label: "Agent", Kind: "agent", X: 100, Y: 100}}
 	}
 

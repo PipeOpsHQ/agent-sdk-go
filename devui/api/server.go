@@ -18,6 +18,8 @@ import (
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
 	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
@@ -35,6 +37,7 @@ type Config struct {
 	AuditStore       AuditStore
 	Runtime          RuntimeService
 	Playground       PlaygroundRunner
+	Scheduler        *cronpkg.Scheduler
 	RequireAPIKey    bool
 	AllowLocalNoAuth bool
 }
@@ -139,6 +142,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/tools/instances", s.require(auth.RoleViewer, s.handleToolInstances))
 	s.mux.HandleFunc("/api/v1/tools/instances/", s.require(auth.RoleViewer, s.handleToolInstanceByID))
 	s.mux.HandleFunc("/api/v1/tools/bundles", s.require(auth.RoleViewer, s.handleToolBundles))
+	s.mux.HandleFunc("/api/v1/tools/catalog", s.require(auth.RoleViewer, s.handleToolCatalog))
 	s.mux.HandleFunc("/api/v1/workflows/registry", s.require(auth.RoleViewer, s.handleWorkflowRegistry))
 	s.mux.HandleFunc("/api/v1/workflows", s.require(auth.RoleViewer, s.handleWorkflows))
 	s.mux.HandleFunc("/api/v1/workflows/", s.require(auth.RoleViewer, s.handleWorkflowBindingByID))
@@ -148,6 +152,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/auth/keys", s.require(auth.RoleAdmin, s.handleAuthKeys))
 	s.mux.HandleFunc("/api/v1/auth/keys/", s.require(auth.RoleAdmin, s.handleAuthKeyByID))
 	s.mux.HandleFunc("/api/v1/audit/logs", s.require(auth.RoleViewer, s.handleAuditLogs))
+	s.mux.HandleFunc("/api/v1/cron/jobs", s.require(auth.RoleViewer, s.handleCronJobs))
+	s.mux.HandleFunc("/api/v1/cron/jobs/", s.require(auth.RoleOperator, s.handleCronJobByName))
+	s.mux.HandleFunc("/api/v1/flows", s.require(auth.RoleViewer, s.handleFlows))
+	s.mux.HandleFunc("/api/v1/reflect", s.require(auth.RoleViewer, s.handleReflect))
+	s.mux.HandleFunc("/api/v1/actions/run", s.require(auth.RoleOperator, s.handleRunAction))
 
 	staticRoot, _ := fs.Sub(staticFiles, "static")
 	files := http.FileServer(http.FS(staticRoot))
@@ -844,6 +853,36 @@ func (s *Server) handleToolBundles(w http.ResponseWriter, r *http.Request, p pri
 	}
 }
 
+func (s *Server) handleToolCatalog(w http.ResponseWriter, r *http.Request, _ principal) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+	type bundleItem struct {
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Tools       []string `json:"tools"`
+	}
+	type toolItem struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	bundles := fwtools.BundleCatalog()
+	bi := make([]bundleItem, len(bundles))
+	for i, b := range bundles {
+		bi[i] = bundleItem{Name: "@" + b.Name, Description: b.Description, Tools: b.Tools}
+	}
+	tc := fwtools.ToolCatalog()
+	ti := make([]toolItem, len(tc))
+	for i, t := range tc {
+		ti[i] = toolItem{Name: t.Name, Description: t.Description}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"bundles": bi,
+		"tools":   ti,
+	})
+}
+
 func (s *Server) handleWorkflows(w http.ResponseWriter, r *http.Request, _ principal) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
@@ -876,6 +915,18 @@ func (s *Server) handleWorkflowRegistry(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"workflows": items,
 		"count":     len(items),
+	})
+}
+
+func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request, _ principal) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+	defs := flow.All()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"flows": defs,
+		"count": len(defs),
 	})
 }
 

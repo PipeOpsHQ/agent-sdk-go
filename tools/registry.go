@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -119,6 +121,44 @@ func ToolCatalog() []ToolInfo {
 	return out
 }
 
+// ToolSchema returns the JSON schema for a single tool by name.
+// It instantiates the tool from the factory to read its definition.
+func ToolSchema(name string) (map[string]any, bool) {
+	regMu.RLock()
+	factory, ok := toolFactories[name]
+	regMu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	t := factory()
+	if t == nil {
+		return nil, false
+	}
+	return t.Definition().JSONSchema, true
+}
+
+// ToolSchemas returns name→JSONSchema for all registered tools.
+func ToolSchemas() map[string]map[string]any {
+	regMu.RLock()
+	names := make([]string, 0, len(toolFactories))
+	for n := range toolFactories {
+		names = append(names, n)
+	}
+	regMu.RUnlock()
+
+	out := make(map[string]map[string]any, len(names))
+	for _, n := range names {
+		regMu.RLock()
+		factory := toolFactories[n]
+		regMu.RUnlock()
+		t := factory()
+		if t != nil {
+			out[n] = t.Definition().JSONSchema
+		}
+	}
+	return out
+}
+
 func BundleCatalog() []Bundle {
 	regMu.RLock()
 	defer regMu.RUnlock()
@@ -207,4 +247,19 @@ func expandSelection(selection []string) ([]string, error) {
 	}
 
 	return ordered, nil
+}
+
+// ExecuteTool instantiates and runs a single tool by name with the given input.
+func ExecuteTool(ctx context.Context, name string, input json.RawMessage) (any, error) {
+	regMu.RLock()
+	factory, ok := toolFactories[name]
+	regMu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("unknown tool %q", name)
+	}
+	t := factory()
+	if t == nil {
+		return nil, fmt.Errorf("tool %q factory returned nil", name)
+	}
+	return t.Execute(ctx, input)
 }

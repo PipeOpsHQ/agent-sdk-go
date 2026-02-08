@@ -205,6 +205,70 @@ func (g *Graph) hasCycle() bool {
 
 func Always(_ context.Context, _ *State) (bool, error) { return true, nil }
 
+// NodeInfo describes a node in the graph for introspection.
+type NodeInfo struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"` // "agent", "tool", or "router"
+}
+
+// EdgeInfo describes an edge in the graph for introspection.
+type EdgeInfo struct {
+	From        string `json:"from"`
+	To          string `json:"to"`
+	Conditional bool   `json:"conditional"`
+}
+
+// NodeInfos returns metadata about all nodes in the graph.
+func (g *Graph) NodeInfos() []NodeInfo {
+	if g == nil {
+		return nil
+	}
+	out := make([]NodeInfo, 0, len(g.nodes))
+	for id, node := range g.nodes {
+		kind := "tool"
+		switch node.(type) {
+		case *AgentNode:
+			kind = "agent"
+		case *RouterNode:
+			kind = "router"
+		}
+		out = append(out, NodeInfo{ID: id, Kind: kind})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// EdgeInfos returns metadata about all edges in the graph.
+func (g *Graph) EdgeInfos() []EdgeInfo {
+	if g == nil {
+		return nil
+	}
+	out := make([]EdgeInfo, 0)
+	keys := make([]string, 0, len(g.edges))
+	for k := range g.edges {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, from := range keys {
+		for _, edge := range g.edges[from] {
+			out = append(out, EdgeInfo{
+				From:        edge.From,
+				To:          edge.To,
+				Conditional: edge.Condition != nil,
+			})
+		}
+	}
+	return out
+}
+
+// StartNodeID returns the ID of the start node.
+func (g *Graph) StartNodeID() string {
+	if g == nil {
+		return ""
+	}
+	return g.startNodeID
+}
+
 func RouteEquals(key, expected string) Condition {
 	if key == "" {
 		key = "route"
