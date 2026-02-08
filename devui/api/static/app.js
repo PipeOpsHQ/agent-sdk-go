@@ -1579,6 +1579,7 @@ async function sendPlaygroundMessage() {
   const flowName = document.getElementById('playgroundFlow')?.value || '';
   const workflow = document.getElementById('playgroundWorkflow')?.value || '';
   const tools = Array.from(document.getElementById('playgroundTools')?.selectedOptions || []).map(o => o.value);
+  const skills = Array.from(document.getElementById('playgroundSkills')?.selectedOptions || []).map(o => o.value);
   const systemPrompt = document.getElementById('playgroundSystemPrompt')?.value?.trim() || '';
 
   appendChatMessage('user', prompt);
@@ -1592,6 +1593,7 @@ async function sendPlaygroundMessage() {
     flow: flowName || undefined,
     workflow,
     tools,
+    skills,
     systemPrompt,
   };
 
@@ -1778,6 +1780,7 @@ function initPlayground() {
   flowSelect?.addEventListener('change', onFlowSelected);
   loadFlows();
   loadToolCatalog();
+  loadSkillsCatalog();
 }
 
 let _loadedFlows = [];
@@ -1859,6 +1862,29 @@ async function loadToolCatalog() {
   }
 }
 
+async function loadSkillsCatalog() {
+  const select = document.getElementById('playgroundSkills');
+  if (!select) return;
+  try {
+    const data = await api.get('/api/v1/skills');
+    const skills = Array.isArray(data?.skills) ? data.skills : [];
+    select.innerHTML = '';
+    if (!skills.length) {
+      select.innerHTML = '<option disabled>No skills available</option>';
+      return;
+    }
+    skills.forEach(sk => {
+      const opt = document.createElement('option');
+      opt.value = sk.name;
+      opt.textContent = sk.name;
+      opt.title = sk.description || '';
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    select.innerHTML = '<option disabled>Failed to load skills</option>';
+  }
+}
+
 function onFlowSelected() {
   const select = document.getElementById('playgroundFlow');
   const flowInfo = document.getElementById('playgroundFlowInfo');
@@ -1883,6 +1909,8 @@ function onFlowSelected() {
     if (sp) sp.value = '';
     const ts = document.getElementById('playgroundTools');
     if (ts) [...ts.options].forEach(o => { o.selected = o.value === '@default'; });
+    const ss = document.getElementById('playgroundSkills');
+    if (ss) [...ss.options].forEach(o => { o.selected = false; });
     const ci = document.getElementById('chatInput');
     if (ci) ci.placeholder = 'Send a message...';
     return;
@@ -1898,6 +1926,7 @@ function onFlowSelected() {
     const tags = [];
     if (f.workflow) tags.push(`<span class="meta-tag">workflow: ${escapeHtml(f.workflow || 'basic')}</span>`);
     if (f.tools?.length) tags.push(`<span class="meta-tag">tools: ${f.tools.map(t => escapeHtml(t)).join(', ')}</span>`);
+    if (f.skills?.length) tags.push(`<span class="meta-tag">skills: ${f.skills.map(s => escapeHtml(s)).join(', ')}</span>`);
     flowMeta.innerHTML = tags.join('');
   }
 
@@ -1945,6 +1974,13 @@ function onFlowSelected() {
     }
   }
 
+  // Pre-select skills from flow definition
+  const ss = document.getElementById('playgroundSkills');
+  if (ss) {
+    const flowSkills = f.skills || [];
+    [...ss.options].forEach(o => { o.selected = flowSkills.includes(o.value); });
+  }
+
   // If flow has an input example, populate it and update placeholder
   if (f.inputExample) {
     if (currentInputMode === 'json') {
@@ -1986,6 +2022,7 @@ async function sendJsonPayload() {
   const flowName = document.getElementById('playgroundFlow')?.value || '';
   const workflow = document.getElementById('playgroundWorkflow')?.value || '';
   const tools = Array.from(document.getElementById('playgroundTools')?.selectedOptions || []).map(o => o.value);
+  const skills = Array.from(document.getElementById('playgroundSkills')?.selectedOptions || []).map(o => o.value);
   const systemPrompt = document.getElementById('playgroundSystemPrompt')?.value?.trim() || '';
 
   const payload = {
@@ -1994,6 +2031,7 @@ async function sendJsonPayload() {
     flow: flowName || undefined,
     workflow,
     tools,
+    skills,
     systemPrompt,
   };
 
@@ -2835,7 +2873,7 @@ async function runAction() {
 // ===== Skills =====
 async function loadSkills() {
   try {
-    const res = await api('/api/v1/skills');
+    const res = await api.get('/api/v1/skills');
     const body = document.getElementById('skillsListBody');
     if (!res.skills || res.skills.length === 0) {
       body.innerHTML = '<div class="empty-state"><p>No skills installed</p></div>';
@@ -2867,7 +2905,7 @@ async function loadSkills() {
 
 async function viewSkillDetail(name) {
   try {
-    const sk = await api(`/api/v1/skills/${name}`);
+    const sk = await api.get(`/api/v1/skills/${name}`);
     document.getElementById('skillDetail').style.display = '';
     document.getElementById('skillDetailName').textContent = sk.name;
     const tools = (sk.allowedTools || []).join(', ') || 'none';
@@ -2891,7 +2929,7 @@ async function viewSkillDetail(name) {
 async function removeSkill(name) {
   if (!confirm(`Remove skill "${name}"?`)) return;
   try {
-    await api(`/api/v1/skills/${name}`, { method: 'DELETE' });
+    await api.request(`/api/v1/skills/${name}`, { method: 'DELETE' });
     document.getElementById('skillDetail').style.display = 'none';
     loadSkills();
   } catch (e) {
@@ -2908,23 +2946,13 @@ async function installSkillFromGitHub() {
   const repoUrl = document.getElementById('skillRepoUrl').value.trim();
   if (!repoUrl) { alert('Repository URL is required'); return; }
   try {
-    const res = await api('/api/v1/skills', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repoUrl }),
-    });
+    const res = await api.post('/api/v1/skills', { repoUrl });
     alert(`Installed ${res.count} skill(s) from ${repoUrl}`);
     toggleSkillInstallForm();
     loadSkills();
   } catch (e) {
     alert('Install failed: ' + e.message);
   }
-}
-
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
 }
 
 // ===== Bootstrap =====

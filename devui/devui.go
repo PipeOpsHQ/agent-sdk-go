@@ -260,6 +260,13 @@ func Start(ctx context.Context, opts ...Options) error {
 		func() tools.Tool { return tools.NewCronManager(scheduler) },
 	)
 
+	// Register self_api tool — lets the agent call its own API
+	selfAPIBase := "http://" + o.Addr
+	_ = tools.RegisterTool("self_api",
+		"Call the agent's own DevUI API to manage cron jobs, skills, flows, runs, tools, workflows, runtime, and more.",
+		func() tools.Tool { return tools.NewSelfAPI(selfAPIBase) },
+	)
+
 	// Start HTTP server
 	server := devuiapi.NewServer(devuiapi.Config{
 		Addr:             o.Addr,
@@ -379,8 +386,15 @@ func (r *playgroundRunner) Run(ctx context.Context, req devuiapi.PlaygroundReque
 		systemPrompt = "You are a practical AI assistant. Be concise, accurate, and actionable."
 	}
 
-	// Resolve skills — append instructions to system prompt, expand allowed tools
-	for _, skillName := range flowSkills {
+	// Resolve skills — merge flow skills + request skills, then inject instructions + tools
+	allSkills := make(map[string]bool)
+	for _, s := range flowSkills {
+		allSkills[s] = true
+	}
+	for _, s := range req.Skills {
+		allSkills[s] = true
+	}
+	for skillName := range allSkills {
 		if s, ok := skill.Get(skillName); ok {
 			if s.Instructions != "" {
 				systemPrompt += "\n\n## Skill: " + s.Name + "\n" + s.Instructions

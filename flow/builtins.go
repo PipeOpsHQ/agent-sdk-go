@@ -35,6 +35,7 @@ func RegisterBuiltins() {
 		Name:        "code-reviewer",
 		Description: "Reviews code changes and provides feedback on quality, bugs, and improvements.",
 		Tools:       []string{"@code", "@default"},
+		Skills:      []string{"code-audit", "secure-defaults"},
 		SystemPrompt: `You are a senior code reviewer. Analyze code changes and provide:
 1. Bug identification
 2. Security concerns
@@ -70,6 +71,7 @@ Be constructive and specific with line references.`,
 		Name:        "devops-assistant",
 		Description: "Helps with Docker, Kubernetes, and infrastructure tasks.",
 		Tools:       []string{"@devops", "@system", "@default"},
+		Skills:      []string{"k8s-debug"},
 		SystemPrompt: `You are a DevOps engineer assistant. Help with:
 - Docker container management
 - Kubernetes cluster operations
@@ -100,6 +102,7 @@ Be practical and provide ready-to-use commands.`,
 		Description: "Analyzes security vulnerabilities, log anomalies, and threat patterns.",
 		Workflow:    "basic",
 		Tools:       []string{"@security", "@code", "@network", "@default"},
+		Skills:      []string{"incident-response", "code-audit"},
 		SystemPrompt: `You are a cybersecurity analyst. Analyze inputs for:
 - Vulnerability assessment (CVE identification, severity)
 - Log anomaly detection (suspicious patterns, intrusion indicators)

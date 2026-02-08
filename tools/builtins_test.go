@@ -47,6 +47,70 @@ func TestSecretRedactor(t *testing.T) {
 			wantRedacted: true,
 			wantSecrets:  []string{"Password"},
 		},
+		{
+			name:         "Short password",
+			input:        "pass=abc",
+			wantRedacted: true,
+			wantSecrets:  []string{"Password"},
+		},
+		{
+			name:         "Password in URL",
+			input:        "postgres://admin:s3cretP@ss@db.example.com:5432/mydb",
+			wantRedacted: true,
+			wantSecrets:  []string{"Password in URL"},
+		},
+		{
+			name:         "MongoDB connection string",
+			input:        "mongodb+srv://user:hunter2@cluster0.abc.mongodb.net/test",
+			wantRedacted: true,
+			wantSecrets:  []string{"DB Connection String"},
+		},
+		{
+			name:         "Redis connection string",
+			input:        "redis://default:mypassword@redis.example.com:6379",
+			wantRedacted: true,
+			wantSecrets:  []string{"DB Connection String"},
+		},
+		{
+			name:         "SendGrid Key",
+			input:        "SENDGRID_API_KEY=" + "SG" + ".abcdefghijklmnopqrstuv.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq",
+			wantRedacted: true,
+			wantSecrets:  []string{"SendGrid Key"},
+		},
+		{
+			name:         "Stripe secret key",
+			input:        "sk_" + "live_abcdefghijklmnopqrstuvwx",
+			wantRedacted: true,
+			wantSecrets:  []string{"Stripe Key"},
+		},
+		{
+			name:         "Generic secret assignment",
+			input:        "client_secret=abcdef0123456789abcdef",
+			wantRedacted: true,
+		},
+		{
+			name:         "Private key header",
+			input:        "-----BEGIN RSA PRIVATE KEY-----",
+			wantRedacted: true,
+			wantSecrets:  []string{"Private Key"},
+		},
+		{
+			name:         "Encrypted private key header",
+			input:        "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+			wantRedacted: true,
+			wantSecrets:  []string{"Private Key"},
+		},
+		{
+			name:         "Password with colon separator",
+			input:        "password: MyStr0ngP@ss!",
+			wantRedacted: true,
+			wantSecrets:  []string{"Password"},
+		},
+		{
+			name:         "Password in quotes",
+			input:        `DB_PASSWORD="hunter2"`,
+			wantRedacted: true,
+		},
 	}
 
 	for _, tt := range tests {

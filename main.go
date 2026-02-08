@@ -343,6 +343,7 @@ func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.Playground
 	}
 
 	// Resolve flow defaults — request fields override flow defaults.
+	var flowSkills []string
 	if name := strings.TrimSpace(req.Flow); name != "" {
 		if f, ok := flow.Get(name); ok {
 			if strings.TrimSpace(req.Workflow) == "" {
@@ -354,7 +355,31 @@ func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.Playground
 			if strings.TrimSpace(req.SystemPrompt) == "" {
 				req.SystemPrompt = f.SystemPrompt
 			}
+			flowSkills = f.Skills
 		}
+	}
+
+	// Resolve skills — merge flow skills + request skills
+	allSkills := make(map[string]bool)
+	for _, s := range flowSkills {
+		allSkills[s] = true
+	}
+	for _, s := range req.Skills {
+		allSkills[s] = true
+	}
+	systemPrompt := strings.TrimSpace(req.SystemPrompt)
+	for skillName := range allSkills {
+		if s, ok := skill.Get(skillName); ok {
+			if s.Instructions != "" {
+				systemPrompt += "\n\n## Skill: " + s.Name + "\n" + s.Instructions
+			}
+			if len(s.AllowedTools) > 0 {
+				req.Tools = append(req.Tools, s.AllowedTools...)
+			}
+		}
+	}
+	if systemPrompt != "" {
+		req.SystemPrompt = systemPrompt
 	}
 
 	opts := cliOptions{

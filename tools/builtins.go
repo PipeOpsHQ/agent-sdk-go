@@ -152,6 +152,13 @@ func init() {
 		func() Tool { return NewCronManager(nil) },
 	)
 
+	// Self-API tool (baseURL injected at runtime by DevUI)
+	MustRegisterTool(
+		"self_api",
+		"Call the agent's own DevUI API to manage cron jobs, skills, flows, runs, tools, workflows, runtime, and more. The agent can introspect and control itself.",
+		func() Tool { return NewSelfAPI("http://127.0.0.1:7070") },
+	)
+
 	// Linux system tools
 	MustRegisterTool(
 		"curl",
@@ -278,6 +285,7 @@ func init() {
 
 	MustRegisterBundle("scheduling", "Cron and scheduling tools", []string{
 		"cron_manager",
+		"self_api",
 	})
 
 	MustRegisterBundle("linux", "Essential Linux system tools", []string{
@@ -326,5 +334,6 @@ func init() {
 		"k3s",
 		"cron_manager",
 		"todo_manager",
+		"self_api",
 	})
 }
