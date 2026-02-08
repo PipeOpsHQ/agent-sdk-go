@@ -941,11 +941,22 @@ function syncGraphRunOptions(runRows) {
 }
 
 let topologyZoom = 1;
+let topologyPanX = 0;
+let topologyPanY = 0;
+let _topoDrag = { active: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 };
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 3;
+const TOPO_BASE_W = 1200, TOPO_BASE_H = 420;
 
 function zoomTopology(delta) {
   topologyZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, topologyZoom + delta));
+  applyTopologyZoom();
+}
+
+function resetTopologyView() {
+  topologyZoom = 1;
+  topologyPanX = 0;
+  topologyPanY = 0;
   applyTopologyZoom();
 }
 
@@ -953,12 +964,45 @@ function applyTopologyZoom() {
   const svg = document.getElementById('workflowGraphSvg');
   const label = document.getElementById('zoomLevel');
   if (svg) {
-    const baseW = 1200, baseH = 420;
-    const w = baseW / topologyZoom, h = baseH / topologyZoom;
-    const ox = (baseW - w) / 2, oy = (baseH - h) / 2;
+    const w = TOPO_BASE_W / topologyZoom, h = TOPO_BASE_H / topologyZoom;
+    const ox = (TOPO_BASE_W - w) / 2 + topologyPanX;
+    const oy = (TOPO_BASE_H - h) / 2 + topologyPanY;
     svg.setAttribute('viewBox', `${ox} ${oy} ${w} ${h}`);
   }
   if (label) label.textContent = `${Math.round(topologyZoom * 100)}%`;
+}
+
+function initTopologyDrag() {
+  const wrap = document.getElementById('topologyCanvasWrap');
+  if (!wrap) return;
+
+  wrap.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    _topoDrag = { active: true, startX: e.clientX, startY: e.clientY, startPanX: topologyPanX, startPanY: topologyPanY };
+    wrap.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!_topoDrag.active) return;
+    const svg = document.getElementById('workflowGraphSvg');
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    // Convert pixel movement to viewBox units
+    const scaleX = (TOPO_BASE_W / topologyZoom) / rect.width;
+    const scaleY = (TOPO_BASE_H / topologyZoom) / rect.height;
+    topologyPanX = _topoDrag.startPanX - (e.clientX - _topoDrag.startX) * scaleX;
+    topologyPanY = _topoDrag.startPanY - (e.clientY - _topoDrag.startY) * scaleY;
+    applyTopologyZoom();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (_topoDrag.active) {
+      _topoDrag.active = false;
+      const wrap = document.getElementById('topologyCanvasWrap');
+      if (wrap) wrap.style.cursor = 'grab';
+    }
+  });
 }
 
 async function loadWorkflowTopology() {
@@ -969,9 +1013,8 @@ async function loadWorkflowTopology() {
   const workflowName = workflowSelect.value || selectedGraphWorkflow || '';
   if (!workflowName) return;
   selectedGraphWorkflow = workflowName;
-  // Reset zoom when switching workflows
-  topologyZoom = 1;
-  applyTopologyZoom();
+  // Reset zoom and pan when switching workflows
+  resetTopologyView();
   const runID = runSelect?.value || '';
   try {
     const topology = await api.get(`/api/v1/workflows/${encodeURIComponent(workflowName)}/topology`).catch(() => ({ nodes: [], edges: [] }));
@@ -2353,12 +2396,13 @@ function initButtons() {
   document.getElementById('refreshTopology')?.addEventListener('click', loadWorkflowTopology);
   document.getElementById('zoomIn')?.addEventListener('click', () => zoomTopology(0.2));
   document.getElementById('zoomOut')?.addEventListener('click', () => zoomTopology(-0.2));
-  document.getElementById('zoomReset')?.addEventListener('click', () => { topologyZoom = 1; applyTopologyZoom(); });
+  document.getElementById('zoomReset')?.addEventListener('click', () => { resetTopologyView(); });
   // Mouse wheel zoom on topology canvas
   document.getElementById('topologyCanvasWrap')?.addEventListener('wheel', (e) => {
     e.preventDefault();
     zoomTopology(e.deltaY < 0 ? 0.1 : -0.1);
   }, { passive: false });
+  initTopologyDrag();
   document.getElementById('graphWorkflowSelect')?.addEventListener('change', () => {
     selectedGraphWorkflow = document.getElementById('graphWorkflowSelect')?.value || '';
     loadWorkflowTopology();

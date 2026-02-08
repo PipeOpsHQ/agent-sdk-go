@@ -1198,7 +1198,13 @@ body {
 
 .topology-canvas-wrap {
   padding: 8px 16px 16px;
-  overflow: auto;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+}
+
+.topology-canvas-wrap:active {
+  cursor: grabbing;
 }
 
 #workflowGraphSvg {

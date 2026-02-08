@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -356,9 +357,35 @@ func (a *Agent) RunDetailed(ctx context.Context, input string) (types.RunResult,
 			return types.RunResult{}, fmt.Errorf("failed to persist run progress: %w", err)
 		}
 
-		if len(modelMsg.ToolCalls) == 0 {
-			if modelMsg.Content == "" {
-				emptyErr := errors.New("provider returned empty assistant content")
+		if len(modelMsg.ToolCalls) == 0 && modelMsg.Content == "" {
+			// Retry up to 2 times on empty content — transient provider issue
+			const maxEmptyRetries = 2
+			for emptyRetry := 1; emptyRetry <= maxEmptyRetries; emptyRetry++ {
+				log.Printf("⚠️  Provider returned empty content (attempt %d/%d), retrying...", emptyRetry, maxEmptyRetries)
+				// Remove the empty assistant message before retrying
+				messages = messages[:len(messages)-1]
+				time.Sleep(time.Duration(emptyRetry) * 500 * time.Millisecond)
+				retryResp, retryErr := a.generateWithRetry(ctx, req)
+				if retryErr != nil {
+					continue
+				}
+				retryMsg := retryResp.Message
+				retryMsg.Role = types.RoleAssistant
+				if retryResp.Usage != nil {
+					usage.InputTokens += retryResp.Usage.InputTokens
+					usage.OutputTokens += retryResp.Usage.OutputTokens
+					usage.TotalTokens += retryResp.Usage.TotalTokens
+					hasUsage = true
+				}
+				if retryMsg.Content != "" || len(retryMsg.ToolCalls) > 0 {
+					modelMsg = retryMsg
+					messages = append(messages, modelMsg)
+					break
+				}
+			}
+			// If still empty after retries, fail
+			if modelMsg.Content == "" && len(modelMsg.ToolCalls) == 0 {
+				emptyErr := errors.New("provider returned empty assistant content after retries")
 				a.notifyError(ctx, &ErrorMiddlewareEvent{
 					RunID:     runID,
 					SessionID: sessionID,
@@ -372,6 +399,9 @@ func (a *Agent) RunDetailed(ctx context.Context, input string) (types.RunResult,
 				}
 				return types.RunResult{}, emptyErr
 			}
+		}
+
+		if len(modelMsg.ToolCalls) == 0 {
 
 			var finalUsage *types.Usage
 			if hasUsage {
