@@ -4,13 +4,24 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'framework/**'
+      - 'framework/agent/**'
+      - 'framework/graph/**'
+      - 'framework/graphs/**'
+      - 'framework/llm/**'
+      - 'framework/providers/**'
+      - 'framework/tools/**'
+      - 'framework/types/**'
+      - 'framework/workflow/**'
+      - 'framework/state/**'
+      - 'framework/runtime/**'
+      - 'framework/runtimeconfig/**'
+      - 'framework/devui/**'
+      - 'framework/observe/**'
+      - 'framework/integrations/**'
+      - 'framework/adapters/**'
       - 'cmd/**'
       - 'go.mod'
       - 'go.sum'
-    paths-ignore:
-      - '**.md'
-      - 'framework/.github/**'
 
 permissions:
   contents: write
