@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
-	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/graph"
+	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 type staticRunner struct{}

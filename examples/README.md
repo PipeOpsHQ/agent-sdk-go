@@ -14,6 +14,7 @@ This folder contains runnable examples for common SDK use cases.
 | `graph_resume` | Checkpoint and resume workflows | No |
 | `distributed_enqueue` | Distributed task processing | No |
 | `sdk_quickstart` | Quick start template | No |
+| `openclaw_ui` | OpenClaw-style autonomous chat UI demo | No |
 
 ---
 

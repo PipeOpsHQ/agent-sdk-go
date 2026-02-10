@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 const (

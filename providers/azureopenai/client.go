@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/llm"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 const defaultAPIVersion = "2024-10-21"

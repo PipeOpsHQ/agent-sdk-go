@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 func FromRuntimeEvent(in types.Event) Event {

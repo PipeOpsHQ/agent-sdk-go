@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/guardrail"
+	"github.com/PipeOpsHQ/agent-sdk-go/guardrail"
 )
 
 // handleGuardrails handles GET /api/v1/guardrails — returns the catalog of built-in guardrails.

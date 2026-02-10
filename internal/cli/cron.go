@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/runtime/cron"
 )
 
 func runCronCLI(_ context.Context, args []string) {

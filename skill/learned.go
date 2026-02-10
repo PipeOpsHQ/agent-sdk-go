@@ -11,7 +11,7 @@ import (
 // LearnedPattern represents a behavior the agent discovered and saved.
 type LearnedPattern struct {
 	Pattern   string    `json:"pattern"`
-	Source    string    `json:"source"`    // where it was learned from
+	Source    string    `json:"source"` // where it was learned from
 	CreatedAt time.Time `json:"createdAt"`
 }
 

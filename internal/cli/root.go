@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/prompt"
+	"github.com/PipeOpsHQ/agent-sdk-go/prompt"
 )
 
 func Run(ctx context.Context, args []string) {

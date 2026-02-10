@@ -12,13 +12,13 @@ import (
 )
 
 type archiveArgs struct {
-	Action      string   `json:"action"`              // create, extract, list
-	Format      string   `json:"format,omitempty"`     // tar, tar.gz, zip
-	Source      string   `json:"source,omitempty"`     // file/directory to archive (for create)
-	Files       []string `json:"files,omitempty"`      // specific files to include
-	Archive     string   `json:"archive,omitempty"`    // archive file path
-	Destination string   `json:"destination,omitempty"`// extract destination
-	Compression string   `json:"compression,omitempty"`// gzip, bzip2, xz (for tar)
+	Action      string   `json:"action"`                // create, extract, list
+	Format      string   `json:"format,omitempty"`      // tar, tar.gz, zip
+	Source      string   `json:"source,omitempty"`      // file/directory to archive (for create)
+	Files       []string `json:"files,omitempty"`       // specific files to include
+	Archive     string   `json:"archive,omitempty"`     // archive file path
+	Destination string   `json:"destination,omitempty"` // extract destination
+	Compression string   `json:"compression,omitempty"` // gzip, bzip2, xz (for tar)
 }
 
 type archiveResult struct {

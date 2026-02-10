@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 func TestAgentMiddleware_InjectsContext(t *testing.T) {

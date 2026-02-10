@@ -5,8 +5,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
 )
 
 type Builder interface {

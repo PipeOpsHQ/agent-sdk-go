@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/internal/cli"
+	"github.com/PipeOpsHQ/agent-sdk-go/internal/cli"
 )
 
 func main() {

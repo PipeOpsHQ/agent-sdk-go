@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 	"github.com/google/uuid"
 )
 

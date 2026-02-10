@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/catalog"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 func (s *Server) handleWorkflows(w http.ResponseWriter, r *http.Request, _ principal) {

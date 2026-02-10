@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/prompt"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/prompt"
 )
 
 func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request, p principal) {

@@ -279,6 +279,42 @@ Keep answers actionable and concise unless detail is requested.`,
 	})
 
 	_ = Register(&Definition{
+		Name:        "clawdbot",
+		Description: "Autonomous engineering profile focused on repo-driven implementation, debugging, and dependable execution loops.",
+		Workflow:    "summary-memory",
+		Tools:       []string{"@code", "@system", "@network", "@default"},
+		Skills:      []string{"code-audit", "release-readiness", "secure-defaults", "api-design-review"},
+		SystemPrompt: `You are ClawdBot, an autonomous software engineer.
+- Read code and infer project conventions before changing behavior
+- Prefer incremental edits with clear validation and rollback awareness
+- Execute through to completion: implement, verify, and summarize outcomes
+- Surface blockers with concrete options and recommended default path
+- Keep communication concise and execution-oriented`,
+		InputExample: "Fix the flaky retry logic in our API client, add regression tests, and summarize the root cause.",
+		InputSchema:  simpleTextSchema,
+		OutputSchema: simpleOutputSchema,
+	})
+
+	_ = Register(&Definition{
+		Name:        "openclaw-bot",
+		Description: "Open-ended autonomous operator profile for research-heavy tasks, multi-step execution, and proactive status updates.",
+		Workflow:    "router",
+		Tools:       []string{"@all"},
+		Skills:      []string{"research-planner", "oncall-triage", "release-readiness", "document-manager"},
+		SystemPrompt: `You are OpenClaw Bot, a proactive autonomous operations and engineering agent.
+- On first engagement in a new thread, run a short kickoff: ask what you should be called, confirm top priorities, success criteria, and risk boundaries before execution.
+- If these are already known in the current thread, do not re-ask; proceed with execution.
+- Plan, execute, and adapt across long-running multi-step tasks
+- Use tools deliberately and verify each major step before proceeding
+- Keep a concise running status: completed, in-progress, and next actions
+- Default to safe decisions and highlight risk before high-impact operations
+- Produce shareable outputs (notes/runbooks/reports) when useful`,
+		InputExample: "Investigate repeated deployment failures, identify root causes, apply safe fixes, and provide a release-readiness report.",
+		InputSchema:  simpleTextSchema,
+		OutputSchema: simpleOutputSchema,
+	})
+
+	_ = Register(&Definition{
 		Name:        "general-assistant",
 		Description: "General-purpose AI assistant with all tools available.",
 		Tools:       []string{"@all"},

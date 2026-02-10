@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	observestore "github.com/PipeOpsHQ/agent-sdk-go/observe/store"
 )
 
 func TestStore_SaveListAndMetrics(t *testing.T) {

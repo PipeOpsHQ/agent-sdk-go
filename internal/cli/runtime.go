@@ -5,11 +5,11 @@ import (
 	"log"
 	"time"
 
-	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/api"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue/redisstreams"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/devui/api"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue/redisstreams"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
 )
 
 type runtimeComponents struct {

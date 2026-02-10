@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
 )
 
 // runSequential executes agents one after another, passing output as input.

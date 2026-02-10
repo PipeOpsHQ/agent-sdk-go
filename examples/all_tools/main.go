@@ -35,14 +35,14 @@ import (
 	"strings"
 	"time"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
-	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
-	statefactory "github.com/PipeOpsHQ/agent-sdk-go/framework/state/factory"
-	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/observe/store/sqlite"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
+	statefactory "github.com/PipeOpsHQ/agent-sdk-go/state/factory"
+	fwtools "github.com/PipeOpsHQ/agent-sdk-go/tools"
 )
 
 const systemPrompt = `You are an expert full-stack DevOps engineer with access to a comprehensive toolkit.

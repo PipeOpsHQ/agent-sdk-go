@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue/redisstreams"
-	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue/redisstreams"
+	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/state/sqlite"
 )
 
 func main() {

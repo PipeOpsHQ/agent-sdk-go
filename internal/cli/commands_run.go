@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	statefactory "github.com/PipeOpsHQ/agent-sdk-go/framework/state/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	statefactory "github.com/PipeOpsHQ/agent-sdk-go/state/factory"
 )
 
 func runSingle(ctx context.Context, args []string) {

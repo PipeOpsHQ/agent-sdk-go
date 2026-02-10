@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
+	"github.com/PipeOpsHQ/agent-sdk-go/skill"
 )
 
 func runSkillCLI(args []string) {

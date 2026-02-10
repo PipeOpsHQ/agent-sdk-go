@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/state/sqlite"
 )
 
 type singleDeliveryQueue struct {

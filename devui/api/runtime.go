@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue"
 )
 
 type RuntimeService interface {

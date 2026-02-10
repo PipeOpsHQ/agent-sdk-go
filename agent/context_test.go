@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 func TestEstimateTokens(t *testing.T) {

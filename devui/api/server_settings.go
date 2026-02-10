@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
 )
 
 type providerEnvUpdateRequest struct {

@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
-	anthropicprov "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/anthropic"
-	azureopenaiprov "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/azureopenai"
-	geminiprov "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/gemini"
-	ollamaprov "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/ollama"
-	openaiprov "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/openai"
+	"github.com/PipeOpsHQ/agent-sdk-go/llm"
+	anthropicprov "github.com/PipeOpsHQ/agent-sdk-go/providers/anthropic"
+	azureopenaiprov "github.com/PipeOpsHQ/agent-sdk-go/providers/azureopenai"
+	geminiprov "github.com/PipeOpsHQ/agent-sdk-go/providers/gemini"
+	ollamaprov "github.com/PipeOpsHQ/agent-sdk-go/providers/ollama"
+	openaiprov "github.com/PipeOpsHQ/agent-sdk-go/providers/openai"
 )
 
 func FromEnv(ctx context.Context) (llm.Provider, error) {

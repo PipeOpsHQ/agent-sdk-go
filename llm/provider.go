@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 var ErrNotSupported = errors.New("operation not supported by provider")

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 func printUsage() {

@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	"github.com/PipeOpsHQ/agent-sdk-go/llm"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 	"github.com/google/uuid"
 )
 
@@ -916,6 +916,12 @@ func runMetadataFromContext(ctx context.Context) map[string]any {
 			"userId":      target.UserID,
 			"metadata":    target.Metadata,
 		}
+	}
+	if turnType := delivery.TurnTypeFromContext(ctx); turnType != "" {
+		md["turn_type"] = turnType
+	}
+	if parentRunID := delivery.ParentRunIDFromContext(ctx); parentRunID != "" {
+		md["parent_run_id"] = parentRunID
 	}
 	return md
 }

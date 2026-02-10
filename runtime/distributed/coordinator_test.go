@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
-	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/state/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue"
+	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/state/sqlite"
 )
 
 type fakeQueue struct {

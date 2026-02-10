@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/tools"
 )
 
 // createMemoryReadTool creates a tool for reading from shared memory.

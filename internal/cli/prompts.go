@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/prompt"
+	"github.com/PipeOpsHQ/agent-sdk-go/prompt"
 )
 
 // PromptTemplate defines a named prompt template with variable substitution support.

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -20,11 +20,11 @@ func TestSinkEmitsSpans(t *testing.T) {
 
 	now := time.Now()
 	err := sink.Emit(context.Background(), observe.Event{
-		Kind:      observe.KindRun,
-		RunID:     "run-123",
-		SessionID: "sess-456",
-		Status:    observe.StatusCompleted,
-		Timestamp: now,
+		Kind:       observe.KindRun,
+		RunID:      "run-123",
+		SessionID:  "sess-456",
+		Status:     observe.StatusCompleted,
+		Timestamp:  now,
 		DurationMs: 150,
 	})
 	if err != nil {

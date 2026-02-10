@@ -28,16 +28,16 @@ import (
 	"strings"
 	"time"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
-	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	statefactory "github.com/PipeOpsHQ/agent-sdk-go/framework/state/factory"
-	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/llm"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/observe/store/sqlite"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	statefactory "github.com/PipeOpsHQ/agent-sdk-go/state/factory"
+	fwtools "github.com/PipeOpsHQ/agent-sdk-go/tools"
 )
 
 const logAnalyzerPrompt = `You are an expert log analyst and software engineer.
@@ -115,9 +115,9 @@ func main() {
 func runDevUI() {
 	// Register the log-analyzer flow so it appears in the DevUI Playground & Actions tab.
 	flow.MustRegister(&flow.Definition{
-		Name:        "log-analyzer",
-		Description: "Analyzes application logs, identifies issues by severity, suggests root causes and actionable fixes.",
-		Tools:       []string{"file_system", "code_search", "shell_command", "@default"},
+		Name:         "log-analyzer",
+		Description:  "Analyzes application logs, identifies issues by severity, suggests root causes and actionable fixes.",
+		Tools:        []string{"file_system", "code_search", "shell_command", "@default"},
 		SystemPrompt: logAnalyzerPrompt,
 		InputExample: `2026-02-08 10:23:45 ERROR NullPointerException in UserService.java:142 - Cannot invoke method on null reference
 2026-02-08 10:23:46 WARN  HikariPool-1: Connection pool exhausted (active=50, idle=0, waiting=23)

@@ -111,9 +111,9 @@ template: |
 
   ```go
   import (
-      "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-      "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-      "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
+      "github.com/PipeOpsHQ/agent-sdk-go/agent"
+      "github.com/PipeOpsHQ/agent-sdk-go/tools"
+      "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
   )
   ```
 

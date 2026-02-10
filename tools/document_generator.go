@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/storage"
+	"github.com/PipeOpsHQ/agent-sdk-go/storage"
 )
 
 type documentSection struct {

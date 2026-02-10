@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/prompt"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
-	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/prompt"
+	"github.com/PipeOpsHQ/agent-sdk-go/skill"
+	fwtools "github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 // Action represents a single discoverable action in the registry.

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 // SearchTool exposes RAG retrieval as a tool the agent can call explicitly.

@@ -1808,15 +1808,16 @@ body {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 16px 20px;
+  padding: 14px 16px;
   margin-bottom: 16px;
   display: flex;
-  gap: 20px;
+  gap: 16px;
   align-items: flex-start;
 }
 
 .flow-picker {
-  min-width: 240px;
+  flex: 1;
+  min-width: 420px;
 }
 
 .flow-picker label {
@@ -1834,9 +1835,45 @@ body {
   font-size: 14px;
 }
 
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 12px;
+}
+
+.profile-panel {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(13, 27, 43, 0.35);
+}
+
+.profile-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.profile-skills-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.profile-skills-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
 .flow-info {
-  flex: 1;
-  padding: 4px 0;
+  width: 320px;
+  min-width: 280px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: rgba(10, 24, 40, 0.34);
 }
 
 .flow-desc {
@@ -1857,6 +1894,23 @@ body {
   background: var(--bg-tertiary);
   padding: 2px 8px;
   border-radius: 4px;
+}
+
+@media (max-width: 1100px) {
+  .playground-flow-bar {
+    flex-direction: column;
+  }
+  .flow-picker,
+  .flow-info {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 780px) {
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .config-details {
@@ -2463,6 +2517,44 @@ body {
 .history-item-preview {
   font-size: 12px;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-thread-timeline {
+  margin-top: 4px;
+  border-top: 1px dashed rgba(107, 129, 158, 0.28);
+  padding-top: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.history-thread-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.history-thread-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(87, 126, 174, 0.35);
+  color: #a7c6ea;
+  background: rgba(19, 39, 63, 0.6);
+}
+
+.history-thread-parent {
+  font-family: 'IBM Plex Mono', monospace;
+  color: #82a8d1;
+}
+
+.history-thread-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

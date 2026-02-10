@@ -11,24 +11,24 @@ import (
 )
 
 type kubectlArgs struct {
-	Operation  string `json:"operation"`
-	Resource   string `json:"resource,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Namespace  string `json:"namespace,omitempty"`
-	Context    string `json:"context,omitempty"`
-	Kubeconfig string `json:"kubeconfig,omitempty"`
-	Output     string `json:"output,omitempty"`
-	Manifest   string `json:"manifest,omitempty"`
-	FilePath   string `json:"filePath,omitempty"`
-	Container  string `json:"container,omitempty"`
+	Operation  string   `json:"operation"`
+	Resource   string   `json:"resource,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	Namespace  string   `json:"namespace,omitempty"`
+	Context    string   `json:"context,omitempty"`
+	Kubeconfig string   `json:"kubeconfig,omitempty"`
+	Output     string   `json:"output,omitempty"`
+	Manifest   string   `json:"manifest,omitempty"`
+	FilePath   string   `json:"filePath,omitempty"`
+	Container  string   `json:"container,omitempty"`
 	Command    []string `json:"command,omitempty"`
-	LocalPort  int    `json:"localPort,omitempty"`
-	RemotePort int    `json:"remotePort,omitempty"`
-	Replicas   int    `json:"replicas,omitempty"`
-	Subcommand string `json:"subcommand,omitempty"`
-	Selector   string `json:"selector,omitempty"`
-	Tail       int    `json:"tail,omitempty"`
-	Timeout    int    `json:"timeout,omitempty"`
+	LocalPort  int      `json:"localPort,omitempty"`
+	RemotePort int      `json:"remotePort,omitempty"`
+	Replicas   int      `json:"replicas,omitempty"`
+	Subcommand string   `json:"subcommand,omitempty"`
+	Selector   string   `json:"selector,omitempty"`
+	Tail       int      `json:"tail,omitempty"`
+	Timeout    int      `json:"timeout,omitempty"`
 }
 
 // KubectlResult contains the result of a kubectl operation.
@@ -41,8 +41,8 @@ type KubectlResult struct {
 
 // blockedNamespaces are protected from destructive operations.
 var blockedNamespaces = map[string]bool{
-	"kube-system": true,
-	"kube-public": true,
+	"kube-system":     true,
+	"kube-public":     true,
 	"kube-node-lease": true,
 }
 

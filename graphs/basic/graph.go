@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	"github.com/PipeOpsHQ/agent-sdk-go/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 const Name = "basic"

@@ -1,4 +1,4 @@
-module github.com/PipeOpsHQ/agent-sdk-go/framework
+module github.com/PipeOpsHQ/agent-sdk-go
 
 go 1.24.1
 

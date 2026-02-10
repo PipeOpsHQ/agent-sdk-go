@@ -8,16 +8,16 @@ import (
 	"strconv"
 	"strings"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
-	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	statefactory "github.com/PipeOpsHQ/agent-sdk-go/framework/state/factory"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/llm"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/observe/store/sqlite"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	statefactory "github.com/PipeOpsHQ/agent-sdk-go/state/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 func buildRuntimeDeps(ctx context.Context) (llm.Provider, state.Store) {

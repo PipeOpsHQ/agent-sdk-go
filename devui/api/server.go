@@ -15,15 +15,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
-	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/catalog"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	observestore "github.com/PipeOpsHQ/agent-sdk-go/observe/store"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/runtime/cron"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	fwtools "github.com/PipeOpsHQ/agent-sdk-go/tools"
 )
 
 //go:embed static/*

@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	fwtools "github.com/PipeOpsHQ/agent-sdk-go/tools"
 )
 
 type customToolUpsertRequest struct {

@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
 )
 
 type flowCreateRequest struct {

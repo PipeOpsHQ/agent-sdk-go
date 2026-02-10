@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/skill"
 )
 
 // handleSkills handles GET /api/v1/skills (list) and POST /api/v1/skills (install from GitHub).

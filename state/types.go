@@ -3,7 +3,7 @@ package state
 import (
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 type RunRecord struct {

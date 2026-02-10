@@ -111,8 +111,8 @@ jobs:
           echo "" >> CHANGELOG.md
           echo '```go' >> CHANGELOG.md
           echo 'import (' >> CHANGELOG.md
-          echo '    "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"' >> CHANGELOG.md
-          echo '    "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"' >> CHANGELOG.md
+          echo '    "github.com/PipeOpsHQ/agent-sdk-go/agent"' >> CHANGELOG.md
+          echo '    "github.com/PipeOpsHQ/agent-sdk-go/tools"' >> CHANGELOG.md
           echo ')' >> CHANGELOG.md
           echo '```' >> CHANGELOG.md
 

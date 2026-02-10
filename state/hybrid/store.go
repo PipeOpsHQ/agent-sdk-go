@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
 )
 
 type HybridStore struct {

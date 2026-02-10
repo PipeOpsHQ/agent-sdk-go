@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
 )
 
 type ListQuery struct {

@@ -12,12 +12,12 @@ import (
 )
 
 type logViewerArgs struct {
-	Action  string `json:"action"`            // tail, head, grep, follow
-	File    string `json:"file,omitempty"`     // log file path
-	Lines   int    `json:"lines,omitempty"`    // number of lines
-	Pattern string `json:"pattern,omitempty"`  // grep pattern
-	Service string `json:"service,omitempty"`  // journalctl service name
-	Since   string `json:"since,omitempty"`    // journalctl --since
+	Action  string `json:"action"`               // tail, head, grep, follow
+	File    string `json:"file,omitempty"`       // log file path
+	Lines   int    `json:"lines,omitempty"`      // number of lines
+	Pattern string `json:"pattern,omitempty"`    // grep pattern
+	Service string `json:"service,omitempty"`    // journalctl service name
+	Since   string `json:"since,omitempty"`      // journalctl --since
 	Ignore  bool   `json:"ignoreCase,omitempty"` // case-insensitive grep
 }
 

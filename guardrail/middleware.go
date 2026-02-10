@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
 )
 
 // GuardrailError is returned when a guardrail blocks a request.
@@ -100,4 +100,3 @@ func (m *AgentMiddleware) AfterGenerate(ctx context.Context, event *agentfw.Gene
 	}
 	return nil
 }
-

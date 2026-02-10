@@ -12,10 +12,10 @@ import (
 type networkUtilsArgs struct {
 	Action  string `json:"action"`            // ping, port_check, port_scan, resolve
 	Host    string `json:"host"`              // target host
-	Port    int    `json:"port,omitempty"`     // for port_check
-	Ports   string `json:"ports,omitempty"`    // for port_scan: "80,443,8080" or "1-1024"
-	Count   int    `json:"count,omitempty"`    // ping count
-	Timeout int    `json:"timeout,omitempty"`  // seconds
+	Port    int    `json:"port,omitempty"`    // for port_check
+	Ports   string `json:"ports,omitempty"`   // for port_scan: "80,443,8080" or "1-1024"
+	Count   int    `json:"count,omitempty"`   // ping count
+	Timeout int    `json:"timeout,omitempty"` // seconds
 }
 
 type networkResult struct {

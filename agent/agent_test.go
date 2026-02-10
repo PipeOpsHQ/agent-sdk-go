@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/llm"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/llm"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 type mockProvider struct {

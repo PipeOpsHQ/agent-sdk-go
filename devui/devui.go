@@ -11,8 +11,8 @@
 //	    "context"
 //	    "log"
 //
-//	    "github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
-//	    "github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
+//	    "github.com/PipeOpsHQ/agent-sdk-go/devui"
+//	    "github.com/PipeOpsHQ/agent-sdk-go/flow"
 //	)
 //
 //	func main() {
@@ -48,30 +48,30 @@ import (
 	"syscall"
 	"time"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/api"
-	authsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth/sqlite"
-	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog/sqlite"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"     // registers "basic" workflow
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/chain"     // registers "chain" workflow
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/mapreduce" // registers "map-reduce" workflow
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/router"    // registers "router" workflow
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/guardrail"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
-	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
-	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue/redisstreams"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	statefactory "github.com/PipeOpsHQ/agent-sdk-go/framework/state/factory"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/devui/api"
+	authsqlite "github.com/PipeOpsHQ/agent-sdk-go/devui/auth/sqlite"
+	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/devui/catalog/sqlite"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/graph"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/basic"     // registers "basic" workflow
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/chain"     // registers "chain" workflow
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/mapreduce" // registers "map-reduce" workflow
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/router"    // registers "router" workflow
+	"github.com/PipeOpsHQ/agent-sdk-go/guardrail"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/observe/store/sqlite"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/runtime/cron"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue/redisstreams"
+	"github.com/PipeOpsHQ/agent-sdk-go/skill"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	statefactory "github.com/PipeOpsHQ/agent-sdk-go/state/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 // Options configures the DevUI server.
@@ -476,6 +476,7 @@ func (r *playgroundRunner) Run(ctx context.Context, req devuiapi.PlaygroundReque
 		systemPrompt = strings.TrimSpace(systemPrompt + "\n\n" + buildReplyChannelHint(req.ReplyTo))
 	}
 	runCtx := delivery.WithTarget(ctx, req.ReplyTo)
+	runCtx = delivery.WithTurnType(runCtx, "user")
 
 	// Build agent
 	agentOpts := []agentfw.Option{

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 type fakeRunner struct{}

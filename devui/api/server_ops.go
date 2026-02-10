@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/distributed"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	observestore "github.com/PipeOpsHQ/agent-sdk-go/observe/store"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/distributed"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 type interventionRequest struct {

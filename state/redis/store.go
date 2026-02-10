@@ -11,7 +11,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
 )
 
 const (

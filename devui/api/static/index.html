@@ -379,22 +379,28 @@
           <!-- Profile Picker Bar -->
           <div class="playground-flow-bar">
             <div class="flow-picker">
-              <label>Agent Profile</label>
-              <select id="playgroundFlow" class="select">
-                <option value="">(none - use quick setup below)</option>
-              </select>
-              <div style="display:flex;gap:8px;margin-top:8px;">
-                <button type="button" class="btn btn-ghost btn-sm" id="supportModeBtn">Support Mode</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="resetModeBtn">Reset</button>
-              </div>
-              <div class="config-group" style="margin-top:10px;">
-                <label>Profile Skills</label>
-                <div style="display:flex;gap:6px;margin:-2px 0 8px;">
-                  <button type="button" class="btn btn-ghost btn-sm" id="selectAllProfileSkills">Select all</button>
-                  <button type="button" class="btn btn-ghost btn-sm" id="clearAllProfileSkills">Clear</button>
+              <div class="profile-grid">
+                <div class="profile-panel">
+                  <label>Agent Profile</label>
+                  <select id="playgroundFlow" class="select">
+                    <option value="">(none - use quick setup below)</option>
+                  </select>
+                  <div class="profile-actions-row">
+                    <button type="button" class="btn btn-ghost btn-sm" id="supportModeBtn">Support Mode</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="resetModeBtn">Reset</button>
+                  </div>
                 </div>
-                <select id="playgroundProfileSkills" class="select" multiple size="4"></select>
-                <small style="color:var(--text-muted);font-size:11px;">Skills chosen here apply directly to this profile run.</small>
+                <div class="profile-panel">
+                  <div class="profile-skills-header">
+                    <label>Profile Skills</label>
+                    <div class="profile-skills-actions">
+                      <button type="button" class="btn btn-ghost btn-sm" id="selectAllProfileSkills">Select all</button>
+                      <button type="button" class="btn btn-ghost btn-sm" id="clearAllProfileSkills">Clear</button>
+                    </div>
+                  </div>
+                  <select id="playgroundProfileSkills" class="select" multiple size="4"></select>
+                  <small style="color:var(--text-muted);font-size:11px;">Skills chosen here apply directly to this profile run.</small>
+                </div>
               </div>
             </div>
             <div class="flow-info" id="playgroundFlowInfo" style="display:none;">
@@ -1187,6 +1193,20 @@
             <div class="card-header"><h3>Scheduled Jobs</h3></div>
             <div id="cronJobList" class="card-body">
               <div class="empty-state"><p>No scheduled jobs yet</p></div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:16px;">
+            <div class="card-header">
+              <h3>Job History & Logs</h3>
+              <button class="btn btn-secondary btn-sm" id="refreshCronHistoryBtn">Refresh</button>
+            </div>
+            <div class="card-body" style="padding:12px 16px;">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                <span style="font-size:12px;color:var(--text-muted);">Selected job:</span>
+                <strong id="cronHistoryJobName">(none)</strong>
+              </div>
+              <div id="cronJobHistory" style="max-height:260px;overflow:auto;"></div>
             </div>
           </div>
         </section>

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue"
 )
 
 type ExecutionMode string

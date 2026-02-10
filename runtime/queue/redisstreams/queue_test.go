@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue"
 	"github.com/google/uuid"
 )
 

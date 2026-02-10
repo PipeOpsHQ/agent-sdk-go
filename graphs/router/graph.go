@@ -5,17 +5,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	"github.com/PipeOpsHQ/agent-sdk-go/graph"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 const Name = "router"
 
 type Builder struct{}
 
-func (Builder) Name() string        { return Name }
-func (Builder) Description() string { return "Classification router: classify input → route to specialized handler." }
+func (Builder) Name() string { return Name }
+func (Builder) Description() string {
+	return "Classification router: classify input → route to specialized handler."
+}
 
 func (Builder) NewExecutor(runner graph.AgentRunner, store state.Store, sessionID string) (*graph.Executor, error) {
 	return NewExecutor(runner, store, sessionID)

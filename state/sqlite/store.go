@@ -14,8 +14,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	fwtypes "github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	fwtypes "github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 //go:embed schema.sql

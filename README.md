@@ -285,7 +285,7 @@ Skills follow the [Agent Skills open standard](https://github.com/agent-skills) 
 Skills can be loaded from local directories or installed from GitHub:
 
 ```go
-import "github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
+import "github.com/PipeOpsHQ/agent-sdk-go/skill"
 
 // Load all skills from a directory
 skill.LoadDir("./skills")
@@ -326,7 +326,7 @@ You are an expert code reviewer. When reviewing code:
 Skills can be attached to flows or selected in the playground:
 
 ```go
-import "github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
+import "github.com/PipeOpsHQ/agent-sdk-go/flow"
 
 flow.MustRegister(&flow.Definition{
     Name:   "reviewer",
@@ -356,8 +356,8 @@ Guardrails validate input/output before and after LLM calls to enforce safety, c
 
 ```go
 import (
-    "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-    "github.com/PipeOpsHQ/agent-sdk-go/framework/guardrail"
+    "github.com/PipeOpsHQ/agent-sdk-go/agent"
+    "github.com/PipeOpsHQ/agent-sdk-go/guardrail"
 )
 
 pipeline := guardrail.NewPipeline().
@@ -410,7 +410,7 @@ Augment agent context with relevant documents from a vector store.
 ### In-Memory Store
 
 ```go
-import "github.com/PipeOpsHQ/agent-sdk-go/framework/rag"
+import "github.com/PipeOpsHQ/agent-sdk-go/rag"
 
 store := rag.NewMemoryStore()
 store.Add(ctx, []rag.Document{
@@ -454,7 +454,7 @@ Bridge agent events to any OTel-compatible backend (Jaeger, Zipkin, Grafana):
 
 ```go
 import (
-    "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/otel"
+    "github.com/PipeOpsHQ/agent-sdk-go/observe/otel"
     sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 

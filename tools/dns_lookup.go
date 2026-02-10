@@ -12,7 +12,7 @@ import (
 type dnsLookupArgs struct {
 	Hostname   string `json:"hostname"`
 	RecordType string `json:"recordType,omitempty"` // A, AAAA, MX, NS, TXT, CNAME, SRV, PTR
-	Server     string `json:"server,omitempty"`      // custom DNS server
+	Server     string `json:"server,omitempty"`     // custom DNS server
 }
 
 type dnsResult struct {

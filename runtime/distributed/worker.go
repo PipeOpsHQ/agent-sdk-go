@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/queue"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/runtime/queue"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
 	"github.com/google/uuid"
 )
 

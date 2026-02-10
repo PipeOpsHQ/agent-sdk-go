@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 // AgentMiddleware implements agent.Middleware to inject retrieved context before generation.

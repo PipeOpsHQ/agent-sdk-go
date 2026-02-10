@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/internal/config"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/internal/config"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
 )
 
 func parseArgs(args []string) (cliOptions, []string) {

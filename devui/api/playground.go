@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 type PlaygroundRequest struct {

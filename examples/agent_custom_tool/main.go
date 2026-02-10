@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/tools"
 )
 
 type riskInput struct {

@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
 )
 
 const supportFlowName = "support-ui-example"

@@ -7,16 +7,16 @@ import (
 	"strings"
 	"time"
 
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/api"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/guardrail"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/prompt"
-	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/framework/providers/factory"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/devui/api"
+	"github.com/PipeOpsHQ/agent-sdk-go/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/guardrail"
+	"github.com/PipeOpsHQ/agent-sdk-go/prompt"
+	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/skill"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.PlaygroundRequest) (devuiapi.PlaygroundResponse, error) {
@@ -87,7 +87,6 @@ func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.Playground
 	if req.ReplyTo != nil {
 		req.SystemPrompt = strings.TrimSpace(req.SystemPrompt + "\n\n" + buildReplyChannelHint(req.ReplyTo))
 	}
-	runCtx := delivery.WithTarget(ctx, req.ReplyTo)
 
 	if strings.TrimSpace(req.Workflow) == "summary-memory" {
 		if summary := loadLatestContextSummary(ctx, r.store, strings.TrimSpace(req.SessionID)); summary != "" {
@@ -140,6 +139,7 @@ func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.Playground
 
 	maxFollowUps := 3
 	var result types.RunResult
+	parentRunID := ""
 	for turn := 0; turn < maxFollowUps; turn++ {
 		turnOpts := opts
 		turnOpts.sessionID = currentSessionID
@@ -150,14 +150,24 @@ func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.Playground
 			return devuiapi.PlaygroundResponse{}, fmt.Errorf("agent create failed: %w", buildErr)
 		}
 
+		turnCtx := delivery.WithTarget(ctx, req.ReplyTo)
+		if turn == 0 {
+			turnCtx = delivery.WithTurnType(turnCtx, "user")
+		} else {
+			turnCtx = delivery.WithTurnType(turnCtx, "clarification")
+		}
+		if parentRunID != "" {
+			turnCtx = delivery.WithParentRunID(turnCtx, parentRunID)
+		}
+
 		if strings.TrimSpace(turnOpts.workflow) == "" {
-			result, err = agent.RunDetailed(runCtx, currentInput)
+			result, err = agent.RunDetailed(turnCtx, currentInput)
 		} else {
 			exec, execErr := buildExecutor(agent, r.store, r.observer, turnOpts)
 			if execErr != nil {
 				return devuiapi.PlaygroundResponse{}, fmt.Errorf("executor create failed: %w", execErr)
 			}
-			result, err = exec.Run(runCtx, currentInput)
+			result, err = exec.Run(turnCtx, currentInput)
 		}
 		if err != nil {
 			return devuiapi.PlaygroundResponse{}, err
@@ -170,7 +180,11 @@ func (r *localPlaygroundRunner) Run(ctx context.Context, req devuiapi.Playground
 		history = sanitizeConversationHistory(history)
 		if strings.TrimSpace(currentSessionID) == "" && strings.TrimSpace(result.SessionID) != "" {
 			currentSessionID = strings.TrimSpace(result.SessionID)
+			if req.ReplyTo != nil && strings.TrimSpace(req.ReplyTo.ThreadID) == "" {
+				req.ReplyTo.ThreadID = currentSessionID
+			}
 		}
+		parentRunID = strings.TrimSpace(result.RunID)
 
 		if !shouldAutoContinue(result.Output) {
 			break

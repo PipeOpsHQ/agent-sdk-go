@@ -3,11 +3,11 @@ package workflow_test
 import (
 	"testing"
 
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/chain"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/mapreduce"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/router"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/basic"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/chain"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/mapreduce"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/router"
+	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
 func TestBuiltInWorkflowsRegistered(t *testing.T) {

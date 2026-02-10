@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 type Middleware interface {

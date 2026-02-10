@@ -3,7 +3,7 @@ package api
 import (
 	"sync"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
 )
 
 type eventStream struct {

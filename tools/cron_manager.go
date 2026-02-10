@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/runtime/cron"
 )
 
 type cronManagerArgs struct {

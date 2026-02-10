@@ -25,8 +25,8 @@ type curlArgs struct {
 	FollowRedirect bool              `json:"followRedirect,omitempty"` // -L
 	MaxRedirects   int               `json:"maxRedirects,omitempty"`
 	Timeout        int               `json:"timeout,omitempty"`
-	Insecure       bool              `json:"insecure,omitempty"`   // -k
-	Verbose        bool              `json:"verbose,omitempty"`    // -v (include timing, TLS info)
+	Insecure       bool              `json:"insecure,omitempty"`       // -k
+	Verbose        bool              `json:"verbose,omitempty"`        // -v (include timing, TLS info)
 	IncludeHeaders bool              `json:"includeHeaders,omitempty"` // -i
 	UserAgent      string            `json:"userAgent,omitempty"`
 	Cookies        map[string]string `json:"cookies,omitempty"`

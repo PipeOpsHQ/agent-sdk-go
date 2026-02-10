@@ -193,11 +193,11 @@ func Summary(results []Result) string {
 
 // CatalogEntry describes a guardrail for discovery/UI purposes.
 type CatalogEntry struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Direction   string `json:"direction"` // "input", "output", or "both"
-	Action      Action `json:"defaultAction"`
-	Configurable bool  `json:"configurable"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Direction    string `json:"direction"` // "input", "output", or "both"
+	Action       Action `json:"defaultAction"`
+	Configurable bool   `json:"configurable"`
 }
 
 // BuiltinCatalog returns metadata for all built-in guardrails.

@@ -48,9 +48,11 @@ let runsLiveTimer = null;
 let runsRefreshInFlight = false;
 let runsLastRefreshAt = 0;
 let sseRefreshDebounceTimer = null;
+let selectedCronJobName = '';
 const HIDDEN_CONVERSATIONS_KEY = 'playground_hidden_conversations';
 const HIDDEN_QUICK_CHAT_THREADS_KEY = 'quick_chat_hidden_threads';
 const QUICK_CHAT_THREAD_KEY = 'devui_quick_chat_thread';
+const AGENT_STUDIO_THREAD_KEY = 'devui_agent_studio_thread';
 
 const DEFAULT_WORKFLOW_SPEC = {
   start: 'prepare',
@@ -171,6 +173,20 @@ function getOrCreateQuickChatThread() {
   return value;
 }
 
+function getOrCreateAgentStudioThread() {
+  const existing = String(localStorage.getItem(AGENT_STUDIO_THREAD_KEY) || '').trim();
+  if (existing) return existing;
+  const value = `studio-${Math.random().toString(36).slice(2, 10)}`;
+  localStorage.setItem(AGENT_STUDIO_THREAD_KEY, value);
+  return value;
+}
+
+function rotateAgentStudioThread() {
+  const value = `studio-${Math.random().toString(36).slice(2, 10)}`;
+  localStorage.setItem(AGENT_STUDIO_THREAD_KEY, value);
+  return value;
+}
+
 function rotateQuickChatThread() {
   const value = `quick-${Math.random().toString(36).slice(2, 10)}`;
   localStorage.setItem(QUICK_CHAT_THREAD_KEY, value);
@@ -185,6 +201,19 @@ function quickChatReplyTo() {
     userId: String(currentPrincipal?.keyId || '').trim() || undefined,
     metadata: {
       tab: 'quick-chat',
+      ui: 'devui',
+    },
+  };
+}
+
+function agentStudioReplyTo() {
+  return {
+    channel: 'devui',
+    destination: 'agent-studio',
+    threadId: playgroundSessionId || getOrCreateAgentStudioThread(),
+    userId: String(currentPrincipal?.keyId || '').trim() || undefined,
+    metadata: {
+      tab: 'agent-studio',
       ui: 'devui',
     },
   };
@@ -280,10 +309,18 @@ function setTabScopedQuery(tab) {
     params.pgWorkflow = queryParam('pgWorkflow') || '';
     params.pgPrompt = queryParam('pgPrompt') || '';
     params.pgHistory = queryParam('pgHistory') || '';
+    params.pgMode = queryParam('pgMode') || '';
+    params.pgTools = queryParam('pgTools') || '';
+    params.pgSkills = queryParam('pgSkills') || '';
+    params.pgGuards = queryParam('pgGuards') || '';
     params.pgPromptInput = queryParam('pgPromptInput') || '';
   }
   if (tab === 'console') {
     params.qcHistory = queryParam('qcHistory') || '';
+    params.qcFlow = queryParam('qcFlow') || '';
+    params.qcWorkflow = queryParam('qcWorkflow') || '';
+    params.qcTools = queryParam('qcTools') || '';
+    params.qcSkills = queryParam('qcSkills') || '';
   }
   if (tab === 'actions') {
     params.action = queryParam('action') || '';
@@ -292,6 +329,9 @@ function setTabScopedQuery(tab) {
   }
   if (tab === 'prompts') {
     params.prompt = queryParam('prompt') || '';
+  }
+  if (tab === 'scheduler') {
+    params.cronSel = queryParam('cronSel') || '';
   }
   setQueryParams(params);
 }
@@ -1332,6 +1372,7 @@ function syncPlaygroundWorkflowOptions(workflowNames) {
   if (workflowFromQuery && Array.from(select.options).some((o) => o.value === workflowFromQuery)) {
     select.value = workflowFromQuery;
   }
+  setQueryParam('pgWorkflow', select.value || '');
 }
 
 function setPlaygroundWorkflow(name) {
@@ -1610,6 +1651,8 @@ function syncConsoleWorkflowOptions(workflowNames) {
   if (previous && names.includes(previous)) {
     select.value = previous;
   }
+  setSingleSelectFromQueryParam(select, 'qcWorkflow');
+  setQueryParam('qcWorkflow', select.value || '');
 }
 
 function toggleWorkflowCreateForm(forceOpen = null) {
@@ -2172,6 +2215,7 @@ function setInputMode(mode) {
   }
 
   currentInputMode = mode;
+  setQueryParam('pgMode', mode === 'json' ? 'json' : 'chat');
   if (mode === 'json') {
     chatMode && (chatMode.style.display = 'none');
     jsonMode && (jsonMode.style.display = 'block');
@@ -2466,6 +2510,7 @@ async function sendPlaygroundMessage() {
     skills,
     guardrails,
     systemPrompt,
+    replyTo: agentStudioReplyTo(),
   };
 
   // Show streaming progress indicator
@@ -2667,6 +2712,37 @@ function setAllOptions(selectEl, selected) {
   });
 }
 
+function csvValuesFromQuery(name) {
+  const raw = String(queryParam(name) || '').trim();
+  if (!raw) return [];
+  return raw.split(',').map((v) => decodeURIComponent(v.trim())).filter(Boolean);
+}
+
+function setSelectFromQueryParam(selectEl, queryName) {
+  if (!selectEl) return;
+  const values = new Set(csvValuesFromQuery(queryName));
+  if (!values.size) return;
+  [...selectEl.options].forEach((opt) => {
+    opt.selected = values.has(opt.value);
+  });
+}
+
+function setSingleSelectFromQueryParam(selectEl, queryName) {
+  if (!selectEl) return;
+  const raw = String(queryParam(queryName) || '').trim();
+  if (!raw) return;
+  if ([...selectEl.options].some((opt) => opt.value === raw)) {
+    selectEl.value = raw;
+  }
+}
+
+function setCSVQueryParam(name, values) {
+  const clean = (Array.isArray(values) ? values : [])
+    .map((v) => String(v || '').trim())
+    .filter(Boolean);
+  setQueryParam(name, clean.length ? clean.join(',') : '');
+}
+
 function selectedValues(selectEl) {
   if (!selectEl) return [];
   return Array.from(selectEl.selectedOptions || []).map((o) => o.value).filter(Boolean);
@@ -2691,6 +2767,8 @@ function syncPlaygroundProfileSkillsOptions() {
     clone.selected = selected.has(opt.value);
     target.appendChild(clone);
   });
+  setSelectFromQueryParam(target, 'pgSkills');
+  syncPlaygroundSkillsFromProfile();
 }
 
 function syncPlaygroundSkillsFromProfile() {
@@ -2701,6 +2779,7 @@ function syncPlaygroundSkillsFromProfile() {
   Array.from(target.options || []).forEach((opt) => {
     opt.selected = selected.has(opt.value);
   });
+  setCSVQueryParam('pgSkills', selectedValues(source));
 }
 
 function syncPlaygroundProfileFromSkills() {
@@ -2711,6 +2790,7 @@ function syncPlaygroundProfileFromSkills() {
   Array.from(target.options || []).forEach((opt) => {
     opt.selected = selected.has(opt.value);
   });
+  setCSVQueryParam('pgSkills', selectedValues(target));
 }
 
 function selectedPlaygroundSkills() {
@@ -2743,6 +2823,7 @@ function applySupportMode() {
     onFlowSelected();
   }
   if (workflow) workflow.value = 'summary-memory';
+  setQueryParam('pgWorkflow', 'summary-memory');
   if (promptRef && [...promptRef.options].some((o) => o.value === 'support-agent@v1')) {
     promptRef.value = 'support-agent@v1';
     setQueryParam('pgPrompt', 'support-agent@v1');
@@ -2755,6 +2836,7 @@ function applySupportMode() {
 
   const toolValues = ['@default', '@network', '@docs'];
   selectValues(tools, toolValues.filter((v) => [...(tools?.options || [])].some((o) => o.value === v)));
+  setCSVQueryParam('pgTools', selectedValues(tools));
 
   const skillValues = ['document-manager', 'research-planner', 'pdf-reporting'];
   selectValues(skills, skillValues.filter((v) => [...(skills?.options || [])].some((o) => o.value === v)));
@@ -2762,6 +2844,7 @@ function applySupportMode() {
 
   const guardrailValues = ['prompt_injection', 'pii_filter', 'secret_guard', 'content_filter'];
   selectValues(guardrails, guardrailValues.filter((v) => [...(guardrails?.options || [])].some((o) => o.value === v)));
+  setCSVQueryParam('pgGuards', selectedValues(guardrails));
 
   alert('Support mode applied');
 }
@@ -2777,13 +2860,16 @@ function resetSupportMode() {
     onFlowSelected();
   }
   if (workflow) workflow.value = 'basic';
+  setQueryParam('pgWorkflow', 'basic');
   if (promptRef) promptRef.value = '';
   if (promptVars) promptVars.value = '';
   if (systemPrompt) systemPrompt.value = '';
   selectDefaultPlaygroundTools();
+  setCSVQueryParam('pgTools', selectedValues(document.getElementById('playgroundTools')));
   setAllOptions(document.getElementById('playgroundSkills'), false);
   syncPlaygroundProfileFromSkills();
   setAllOptions(document.getElementById('playgroundGuardrails'), false);
+  setCSVQueryParam('pgGuards', []);
   setQueryParam('pgPrompt', '');
   setQueryParam('pgPromptInput', '');
 }
@@ -2835,16 +2921,22 @@ function initPlayground() {
   const skillsSelect = document.getElementById('playgroundSkills');
   const profileSkillsSelect = document.getElementById('playgroundProfileSkills');
   const guardrailsSelect = document.getElementById('playgroundGuardrails');
+  const toolsSelect = document.getElementById('playgroundTools');
+  toolsSelect?.addEventListener('change', () => setCSVQueryParam('pgTools', selectedValues(toolsSelect)));
+  profileSkillsSelect?.addEventListener('change', () => setCSVQueryParam('pgSkills', selectedValues(profileSkillsSelect)));
+  guardrailsSelect?.addEventListener('change', () => setCSVQueryParam('pgGuards', selectedValues(guardrailsSelect)));
   document.getElementById('selectAllSkills')?.addEventListener('click', () => { setAllOptions(skillsSelect, true); syncPlaygroundProfileFromSkills(); });
   document.getElementById('clearAllSkills')?.addEventListener('click', () => { setAllOptions(skillsSelect, false); syncPlaygroundProfileFromSkills(); });
-  document.getElementById('selectAllProfileSkills')?.addEventListener('click', () => { setAllOptions(profileSkillsSelect, true); syncPlaygroundSkillsFromProfile(); });
-  document.getElementById('clearAllProfileSkills')?.addEventListener('click', () => { setAllOptions(profileSkillsSelect, false); syncPlaygroundSkillsFromProfile(); });
+  document.getElementById('selectAllProfileSkills')?.addEventListener('click', () => { setAllOptions(profileSkillsSelect, true); syncPlaygroundSkillsFromProfile(); setCSVQueryParam('pgSkills', selectedValues(profileSkillsSelect)); });
+  document.getElementById('clearAllProfileSkills')?.addEventListener('click', () => { setAllOptions(profileSkillsSelect, false); syncPlaygroundSkillsFromProfile(); setCSVQueryParam('pgSkills', []); });
   skillsSelect?.addEventListener('change', syncPlaygroundProfileFromSkills);
   profileSkillsSelect?.addEventListener('change', syncPlaygroundSkillsFromProfile);
-  document.getElementById('selectAllGuardrails')?.addEventListener('click', () => setAllOptions(guardrailsSelect, true));
-  document.getElementById('clearAllGuardrails')?.addEventListener('click', () => setAllOptions(guardrailsSelect, false));
+  document.getElementById('selectAllGuardrails')?.addEventListener('click', () => { setAllOptions(guardrailsSelect, true); setCSVQueryParam('pgGuards', selectedValues(guardrailsSelect)); });
+  document.getElementById('clearAllGuardrails')?.addEventListener('click', () => { setAllOptions(guardrailsSelect, false); setCSVQueryParam('pgGuards', []); });
   document.getElementById('supportModeBtn')?.addEventListener('click', applySupportMode);
   document.getElementById('resetModeBtn')?.addEventListener('click', resetSupportMode);
+  const modeFromQuery = String(queryParam('pgMode') || '').toLowerCase();
+  if (modeFromQuery === 'json') setInputMode('json');
 }
 
 function initConsoleGround() {
@@ -2853,11 +2945,17 @@ function initConsoleGround() {
   const resetBtn = document.getElementById('consoleResetBtn');
   const flowSelect = document.getElementById('consoleFlow');
   const skillsSelect = document.getElementById('consoleSkills');
+  const workflowSelect = document.getElementById('consoleWorkflow');
+  const toolsSelect = document.getElementById('consoleTools');
   const toggleHistoryBtn = document.getElementById('toggleConsoleHistoryBtn');
   sendBtn?.addEventListener('click', sendConsoleMessage);
   flowSelect?.addEventListener('change', applyConsoleFlowDefaults);
-  document.getElementById('consoleSelectAllSkills')?.addEventListener('click', () => setAllOptions(skillsSelect, true));
-  document.getElementById('consoleClearAllSkills')?.addEventListener('click', () => setAllOptions(skillsSelect, false));
+  flowSelect?.addEventListener('change', () => setQueryParam('qcFlow', flowSelect?.value || ''));
+  workflowSelect?.addEventListener('change', () => setQueryParam('qcWorkflow', workflowSelect?.value || ''));
+  toolsSelect?.addEventListener('change', () => setCSVQueryParam('qcTools', selectedValues(toolsSelect)));
+  skillsSelect?.addEventListener('change', () => setCSVQueryParam('qcSkills', selectedValues(skillsSelect)));
+  document.getElementById('consoleSelectAllSkills')?.addEventListener('click', () => { setAllOptions(skillsSelect, true); setCSVQueryParam('qcSkills', selectedValues(skillsSelect)); });
+  document.getElementById('consoleClearAllSkills')?.addEventListener('click', () => { setAllOptions(skillsSelect, false); setCSVQueryParam('qcSkills', []); });
   toggleHistoryBtn?.addEventListener('click', toggleConsoleHistory);
   document.getElementById('closeConsoleHistory')?.addEventListener('click', toggleConsoleHistory);
   document.getElementById('newConsoleConversationBtn')?.addEventListener('click', startNewConsoleConversation);
@@ -3044,7 +3142,12 @@ function syncConsoleFlowOptions(flows, defaultFlow = '') {
   if (defaultFlow && rows.some((f) => f.name === defaultFlow)) {
     select.value = defaultFlow;
   }
+  setSingleSelectFromQueryParam(select, 'qcFlow');
   applyConsoleFlowDefaults();
+  setSingleSelectFromQueryParam(document.getElementById('consoleWorkflow'), 'qcWorkflow');
+  setSelectFromQueryParam(document.getElementById('consoleTools'), 'qcTools');
+  setSelectFromQueryParam(document.getElementById('consoleSkills'), 'qcSkills');
+  setQueryParam('qcFlow', select.value || '');
 }
 
 function applyConsoleFlowDefaults() {
@@ -3056,6 +3159,7 @@ function applyConsoleFlowDefaults() {
   if (workflowSelect && selected.workflow) {
     if ([...workflowSelect.options].some((o) => o.value === selected.workflow)) {
       workflowSelect.value = selected.workflow;
+      setQueryParam('qcWorkflow', workflowSelect.value);
     }
   }
 
@@ -3065,6 +3169,7 @@ function applyConsoleFlowDefaults() {
     [...toolsSelect.options].forEach((opt) => {
       opt.selected = desired.has(opt.value);
     });
+    setCSVQueryParam('qcTools', selectedValues(toolsSelect));
   }
 
   const skillsSelect = document.getElementById('consoleSkills');
@@ -3073,6 +3178,7 @@ function applyConsoleFlowDefaults() {
     [...skillsSelect.options].forEach((opt) => {
       opt.selected = desiredSkills.has(opt.value);
     });
+    setCSVQueryParam('qcSkills', selectedValues(skillsSelect));
   }
 
   const prompt = document.getElementById('consoleSystemPrompt');
@@ -3191,6 +3297,8 @@ async function loadToolCatalog() {
     if (!bundles.length && !tools.length) {
       select.innerHTML = '<option value="@default" selected>@default</option><option value="@all">@all</option>';
     }
+    setSelectFromQueryParam(select, 'pgTools');
+    setCSVQueryParam('pgTools', selectedValues(select));
     syncConsoleToolsOptions();
   } catch (e) {
     // Fallback to hardcoded defaults
@@ -3215,6 +3323,8 @@ function syncConsoleToolsOptions() {
   if (target.options.length === 0) {
     target.innerHTML = '<option value="@default" selected>@default</option><option value="@all">@all</option>';
   }
+  setSelectFromQueryParam(target, 'qcTools');
+  setCSVQueryParam('qcTools', selectedValues(target));
 }
 
 function syncConsoleSkillsOptions() {
@@ -3231,6 +3341,8 @@ function syncConsoleSkillsOptions() {
     clone.title = opt.title || '';
     target.appendChild(clone);
   });
+  setSelectFromQueryParam(target, 'qcSkills');
+  setCSVQueryParam('qcSkills', selectedValues(target));
   applyConsoleFlowDefaults();
 }
 
@@ -3298,6 +3410,8 @@ async function loadGuardrailsCatalog() {
       opt.title = g.description || '';
       select.appendChild(opt);
     });
+    setSelectFromQueryParam(select, 'pgGuards');
+    setCSVQueryParam('pgGuards', selectedValues(select));
   } catch (e) {
     select.innerHTML = '<option disabled>Failed to load guardrails</option>';
   }
@@ -3351,10 +3465,12 @@ function onFlowSelected() {
     const sp = document.getElementById('playgroundSystemPrompt');
     if (sp) sp.value = '';
     selectDefaultPlaygroundTools();
+    setCSVQueryParam('pgTools', selectedValues(document.getElementById('playgroundTools')));
     const ss = document.getElementById('playgroundSkills');
     if (ss) [...ss.options].forEach(o => { o.selected = false; });
     const ps = document.getElementById('playgroundProfileSkills');
     if (ps) [...ps.options].forEach(o => { o.selected = false; });
+    setCSVQueryParam('pgSkills', []);
     const ci = document.getElementById('chatInput');
     if (ci) ci.placeholder = 'Send a message...';
     return;
@@ -3394,6 +3510,7 @@ function onFlowSelected() {
         ws.appendChild(opt);
       }
       ws.value = f.workflow;
+      setQueryParam('pgWorkflow', ws.value);
     }
     loadPlaygroundGraphPreview();
   }
@@ -3415,6 +3532,7 @@ function onFlowSelected() {
         }
       });
       [...ts.options].forEach(o => { o.selected = f.tools.includes(o.value); });
+      setCSVQueryParam('pgTools', selectedValues(ts));
     }
   }
 
@@ -3510,6 +3628,7 @@ async function sendJsonPayload() {
     skills,
     guardrails,
     systemPrompt,
+    replyTo: agentStudioReplyTo(),
   };
 
   try {
@@ -3700,10 +3819,10 @@ function hideConversationHistory(id) {
 
 function deleteConversationFromHistory(kind, id) {
   if (!id) return;
-  const label = kind === 'session' ? 'this conversation thread' : 'this conversation';
+  const label = (kind === 'session' || kind === 'thread') ? 'this conversation thread' : 'this conversation';
   if (!confirm(`Delete ${label} from history?`)) return;
   hideConversationHistory(`${kind}:${id}`);
-  if ((kind === 'session' && playgroundSessionId === id) || (kind === 'run' && !playgroundSessionId)) {
+  if ((kind === 'session' && playgroundSessionId === id) || (kind === 'thread' && getOrCreateAgentStudioThread() === id) || (kind === 'run' && !playgroundSessionId)) {
     startNewConversation();
   }
   loadPlaygroundHistory();
@@ -3722,27 +3841,26 @@ async function loadPlaygroundHistory() {
     }
     const hidden = getHiddenConversations();
 
-    // Group runs by session_id. Runs without session go individually.
+    // Group runs by thread: sessionId first, then replyTo.threadId.
     const sessions = new Map();
-    const standalone = [];
     for (const run of runs) {
-      const sid = run.sessionId || '';
-      const runID = run.runId || '';
-      if (sid && hidden.has(`session:${sid}`)) continue;
-      if (!sid && runID && hidden.has(`run:${runID}`)) continue;
-      if (sid) {
-        if (!sessions.has(sid)) sessions.set(sid, []);
-        sessions.get(sid).push(run);
-      } else {
-        standalone.push(run);
-      }
+      if (!runBelongsToAgentStudio(run)) continue;
+      const sid = String(run.sessionId || '').trim();
+      const threadID = extractReplyThreadID(run);
+      const groupKey = sid ? `session:${sid}` : `thread:${threadID || run.runId || ''}`;
+      if (!groupKey || groupKey.endsWith(':')) continue;
+      if (hidden.has(groupKey)) continue;
+      if (!sessions.has(groupKey)) sessions.set(groupKey, []);
+      sessions.get(groupKey).push(run);
     }
 
     _playgroundHistoryRuns = runs;
     list.innerHTML = '';
 
-    // Render session groups
-    for (const [sid, sessionRuns] of sessions) {
+    // Render grouped session/thread histories
+    for (const [groupKey, sessionRuns] of sessions) {
+      const sid = String(sessionRuns[0]?.sessionId || '').trim();
+      const threadID = extractReplyThreadID(sessionRuns[0]);
       const latestVisible = sessionRuns.find((r) => !isAutoContinueInput(r.input || '')) || sessionRuns[0];
       const latest = latestVisible;
       const userTurns = sessionRuns.filter((r) => !isAutoContinueInput(r.input || '')).length;
@@ -3751,8 +3869,11 @@ async function loadPlaygroundHistory() {
       const time = formatRelativeTime(latest.createdAt);
       const status = latest.status || 'completed';
       const item = document.createElement('div');
-      item.className = 'history-item' + (sid === playgroundSessionId ? ' active' : '');
-      item.onclick = () => restoreSession(sid, sessionRuns);
+      const isActive = sid
+        ? sid === playgroundSessionId
+        : (threadID && threadID === getOrCreateAgentStudioThread() && !playgroundSessionId);
+      item.className = 'history-item' + (isActive ? ' active' : '');
+      item.onclick = (ev) => restoreSession(sid, threadID, sessionRuns, ev);
       item.innerHTML = `
         <div class="history-item-title">${escapeHtml(truncate(preview, 60))}</div>
         <div class="history-item-meta">
@@ -3763,38 +3884,13 @@ async function loadPlaygroundHistory() {
           <span style="margin-left:auto;"></span>
           <button class="btn btn-ghost btn-sm" title="Delete conversation" data-history-delete>Delete</button>
         </div>
+        ${renderThreadTimelineRows(sessionRuns)}
       `;
       item.querySelector('[data-history-delete]')?.addEventListener('click', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        deleteConversationFromHistory('session', sid);
-      });
-      list.appendChild(item);
-    }
-
-    // Render standalone runs
-    for (const run of standalone) {
-      const preview = run.input || run.output || '(no content)';
-      const time = formatRelativeTime(run.createdAt);
-      const status = run.status || 'completed';
-      const item = document.createElement('div');
-      item.className = 'history-item';
-      item.onclick = () => restoreSingleRun(run);
-      item.innerHTML = `
-        <div class="history-item-title">${escapeHtml(truncate(preview, 60))}</div>
-        <div class="history-item-meta">
-          <span class="status-dot ${status}"></span>
-          <span>1 message</span>
-          <span>•</span>
-          <span>${time}</span>
-          <span style="margin-left:auto;"></span>
-          <button class="btn btn-ghost btn-sm" title="Delete conversation" data-history-delete>Delete</button>
-        </div>
-      `;
-      item.querySelector('[data-history-delete]')?.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        deleteConversationFromHistory('run', run.runId || '');
+        const [kind, id] = groupKey.split(':');
+        deleteConversationFromHistory(kind, id);
       });
       list.appendChild(item);
     }
@@ -3803,13 +3899,65 @@ async function loadPlaygroundHistory() {
   }
 }
 
-async function restoreSession(sessionId, sessionRuns) {
+function extractReplyThreadID(run) {
+  const md = run && typeof run.metadata === 'object' ? run.metadata : {};
+  const reply = md && typeof md.replyTo === 'object' ? md.replyTo : {};
+  return String(reply.threadId || '').trim();
+}
+
+function runBelongsToAgentStudio(run) {
+  const md = run && typeof run.metadata === 'object' ? run.metadata : {};
+  const reply = md && typeof md.replyTo === 'object' ? md.replyTo : {};
+  const channel = String(reply.channel || '').toLowerCase();
+  const destination = String(reply.destination || '').toLowerCase();
+  const tab = String(((reply.metadata && reply.metadata.tab) || '')).toLowerCase();
+  if (channel === 'devui' && destination === 'agent-studio') return true;
+  if (tab === 'agent-studio') return true;
+  if (channel === 'devui' && destination === 'quick-chat') return false;
+  return !reply || Object.keys(reply).length === 0;
+}
+
+function runTurnType(run) {
+  const md = run && typeof run.metadata === 'object' ? run.metadata : {};
+  const raw = String(md.turn_type || '').trim().toLowerCase();
+  if (raw) return raw;
+  if (isAutoContinueInput(run?.input || '')) return 'clarification';
+  return 'user';
+}
+
+function renderThreadTimelineRows(sessionRuns) {
+  const ordered = [...(sessionRuns || [])].reverse();
+  const shown = ordered.slice(-6);
+  if (!shown.length) return '';
+  return `
+    <div class="history-thread-timeline">
+      ${shown.map((r) => {
+        const turnType = runTurnType(r);
+        const label = turnType === 'clarification' ? 'clarify' : (turnType === 'background' ? 'bg' : 'turn');
+        const parentID = String(r?.metadata?.parent_run_id || '').trim();
+        const preview = String(r.input || r.output || '').trim();
+        return `
+          <div class="history-thread-row">
+            <span class="history-thread-tag">${escapeHtml(label)}</span>
+            ${parentID ? `<span class="history-thread-parent">↳ ${escapeHtml(truncate(parentID, 10))}</span>` : ''}
+            <span class="history-thread-text">${escapeHtml(truncate(preview, 72))}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function restoreSession(sessionId, threadID, sessionRuns, event) {
   // Mark active in UI
   document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
   event?.target?.closest?.('.history-item')?.classList.add('active');
 
   // Set session ID for continuity
-  playgroundSessionId = sessionId;
+  playgroundSessionId = sessionId || '';
+  if (threadID) {
+    localStorage.setItem(AGENT_STUDIO_THREAD_KEY, threadID);
+  }
   playgroundConversation = [];
 
   // Clear chat and show messages from this session
@@ -3836,7 +3984,7 @@ async function restoreSession(sessionId, sessionRuns) {
   document.getElementById('chatInput')?.focus();
 }
 
-function restoreSingleRun(run) {
+function restoreSingleRun(run, event) {
   document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
   event?.target?.closest?.('.history-item')?.classList.add('active');
 
@@ -3861,6 +4009,7 @@ function restoreSingleRun(run) {
 function startNewConversation() {
   playgroundSessionId = '';
   playgroundConversation = [];
+  rotateAgentStudioThread();
   const messages = document.getElementById('chatMessages');
   if (messages) {
     messages.innerHTML = '<div class="chat-welcome"><p>Send a message to begin a new conversation.</p></div>';
@@ -4196,9 +4345,18 @@ async function loadCronJobs() {
     const jobs = await api.get('/api/v1/cron/jobs');
     if (!Array.isArray(jobs) || jobs.length === 0) {
       list.innerHTML = '<div class="empty-state"><p>No scheduled jobs yet</p></div>';
+      selectedCronJobName = '';
+      renderCronHistory([]);
       return;
     }
     const canMutateCron = canRole('operator');
+    const cronFromQuery = String(queryParam('cronSel') || '').trim();
+    if (cronFromQuery && jobs.some((j) => j.name === cronFromQuery)) {
+      selectedCronJobName = cronFromQuery;
+    }
+    if (!selectedCronJobName || !jobs.some((j) => j.name === selectedCronJobName)) {
+      selectedCronJobName = jobs[0]?.name || '';
+    }
     list.innerHTML = jobs.map(j => `
       <div class="cron-job-row" style="display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid var(--border-color);">
         <div style="flex:1;">
@@ -4215,15 +4373,69 @@ async function loadCronJobs() {
           ${j.lastError ? `<div style="color:var(--accent-danger);">${escapeHtml(j.lastError)}</div>` : ''}
         </div>
         <div style="display:flex;gap:4px;margin-left:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="viewCronHistory('${escapeHtml(j.name)}')" title="View history">History</button>
           ${canMutateCron ? `<button class="btn btn-secondary btn-sm" onclick="triggerCronJob('${escapeHtml(j.name)}')" title="Trigger now">▶</button>` : ''}
           ${canMutateCron ? `<button class="btn btn-secondary btn-sm" onclick="toggleCronJobEnabled('${escapeHtml(j.name)}', ${!j.enabled})" title="${j.enabled ? 'Pause' : 'Resume'}">${j.enabled ? '⏸' : '▶'}</button>` : ''}
           ${canMutateCron ? `<button class="btn btn-secondary btn-sm" onclick="deleteCronJob('${escapeHtml(j.name)}')" title="Delete" style="color:var(--accent-danger);">✕</button>` : ''}
         </div>
       </div>
     `).join('');
+    if (selectedCronJobName) {
+      await loadCronJobHistory(selectedCronJobName);
+    }
   } catch (e) {
     list.innerHTML = `<div class="empty-state"><p>Scheduler not available</p></div>`;
+    renderCronHistory([], String(e.message || e));
   }
+}
+
+function renderCronHistory(rows, error = '') {
+  const container = document.getElementById('cronJobHistory');
+  const label = document.getElementById('cronHistoryJobName');
+  if (label) label.textContent = selectedCronJobName || '(none)';
+  if (!container) return;
+  if (error) {
+    container.innerHTML = `<div class="empty-state"><p>${escapeHtml(error)}</p></div>`;
+    return;
+  }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No runs yet for this job.</p></div>';
+    return;
+  }
+  container.innerHTML = rows.map((r) => {
+    const status = String(r.status || 'unknown').toLowerCase();
+    const color = status === 'completed' ? 'var(--success)' : 'var(--accent-danger)';
+    const output = String(r.output || r.error || '').trim();
+    return `
+      <div style="border:1px solid var(--border-light);border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <span style="font-size:12px;color:${color};font-weight:600;">${escapeHtml(status)}</span>
+          <span style="font-size:11px;color:var(--text-muted);">${escapeHtml(r.trigger || 'schedule')} • ${new Date(r.at).toLocaleString()}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">duration ${Number(r.durationMs || 0)}ms</div>
+        ${output ? `<pre class="json-output" style="margin-top:6px;max-height:130px;overflow:auto;">${escapeHtml(output)}</pre>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadCronJobHistory(name) {
+  selectedCronJobName = String(name || '').trim();
+  setQueryParam('cronSel', selectedCronJobName);
+  if (!selectedCronJobName) {
+    renderCronHistory([]);
+    return;
+  }
+  try {
+    const data = await api.get(`/api/v1/cron/jobs/${encodeURIComponent(selectedCronJobName)}/history?limit=60`);
+    renderCronHistory(Array.isArray(data?.runs) ? data.runs : []);
+  } catch (e) {
+    renderCronHistory([], 'Failed to load job history');
+  }
+}
+
+function viewCronHistory(name) {
+  loadCronJobHistory(name);
 }
 
 function toggleCronForm() {
@@ -4289,8 +4501,12 @@ async function triggerCronJob(name) {
   }
   try {
     const resp = await api.post(`/api/v1/cron/jobs/${encodeURIComponent(name)}/trigger`, {});
-    alert(`Job triggered. Status: ${resp?.status || 'unknown'}\nOutput: ${(resp?.output || '').substring(0, 200)}`);
-    loadCronJobs();
+    const status = String(resp?.status || 'unknown');
+    if (status === 'failed') {
+      alert(`Job triggered but failed: ${resp?.error || 'unknown error'}`);
+    }
+    await loadCronJobs();
+    await loadCronJobHistory(name);
   } catch (e) {
     alert('Trigger failed: ' + (e.message || e));
   }
@@ -4303,7 +4519,8 @@ async function toggleCronJobEnabled(name, enabled) {
   }
   try {
     await api.request(`/api/v1/cron/jobs/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
-    loadCronJobs();
+    await loadCronJobs();
+    if (selectedCronJobName) await loadCronJobHistory(selectedCronJobName);
   } catch (e) {
     alert('Update failed: ' + (e.message || e));
   }
@@ -4317,7 +4534,7 @@ async function deleteCronJob(name) {
   if (!confirm(`Delete scheduled job "${name}"?`)) return;
   try {
     await api.request(`/api/v1/cron/jobs/${encodeURIComponent(name)}`, { method: 'DELETE' });
-    loadCronJobs();
+    await loadCronJobs();
   } catch (e) {
     alert('Delete failed: ' + (e.message || e));
   }
@@ -4330,6 +4547,8 @@ window.triggerCronJob = triggerCronJob;
 window.toggleCronJobEnabled = toggleCronJobEnabled;
 window.deleteCronJob = deleteCronJob;
 window.loadCronJobs = loadCronJobs;
+window.viewCronHistory = viewCronHistory;
+window.loadCronJobHistory = loadCronJobHistory;
 
 // ===== Event Buttons =====
 function initButtons() {
@@ -4349,6 +4568,14 @@ function initButtons() {
   document.getElementById('refreshKeys')?.addEventListener('click', loadAuthKeys);
   document.getElementById('refreshRuntime')?.addEventListener('click', loadRuntime);
   document.getElementById('refreshQueueEvents')?.addEventListener('click', loadQueueEvents);
+  document.getElementById('refreshCronJobs')?.addEventListener('click', loadCronJobs);
+  document.getElementById('refreshCronHistoryBtn')?.addEventListener('click', () => {
+    if (selectedCronJobName) {
+      loadCronJobHistory(selectedCronJobName);
+    } else {
+      loadCronJobs();
+    }
+  });
   document.getElementById('refreshAudit')?.addEventListener('click', loadAuditLogs);
   document.getElementById('refreshPrompts')?.addEventListener('click', loadPrompts);
   document.getElementById('newPromptBtn')?.addEventListener('click', newPrompt);

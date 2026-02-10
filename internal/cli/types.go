@@ -1,15 +1,15 @@
 package cli
 
 import (
-	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
-	basicgraph "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/chain"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/mapreduce"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/router"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/summarymemory"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
+	basicgraph "github.com/PipeOpsHQ/agent-sdk-go/graphs/basic"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/chain"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/mapreduce"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/router"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/graphs/summarymemory"
+	"github.com/PipeOpsHQ/agent-sdk-go/observe"
+	"github.com/PipeOpsHQ/agent-sdk-go/state"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 const (

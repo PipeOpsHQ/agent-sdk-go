@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/delivery"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
-	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
+	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
+	"github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
+	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/runtime/cron"
 )
 
 func (s *Server) handleCronJobs(w http.ResponseWriter, r *http.Request, p principal) {
@@ -81,6 +81,22 @@ func (s *Server) handleCronJobByName(w http.ResponseWriter, r *http.Request, p p
 	}
 
 	switch {
+	case r.Method == http.MethodGet && action == "history":
+		history, err := s.cfg.Scheduler.History(name, parseInt(r.URL.Query().Get("limit"), 50))
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"name": name, "runs": history, "count": len(history)})
+
+	case r.Method == http.MethodGet && action == "logs":
+		history, err := s.cfg.Scheduler.History(name, parseInt(r.URL.Query().Get("limit"), 50))
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"name": name, "logs": history, "count": len(history)})
+
 	case r.Method == http.MethodGet:
 		job, ok := s.cfg.Scheduler.Get(name)
 		if !ok {
@@ -106,28 +122,22 @@ func (s *Server) handleCronJobByName(w http.ResponseWriter, r *http.Request, p p
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient role: requires operator"})
 			return
 		}
-		job, ok := s.cfg.Scheduler.Get(name)
-		if !ok {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
-			return
-		}
-		if s.cfg.Playground == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "playground runner not configured"})
-			return
-		}
-		resp, err := s.cfg.Playground.Run(r.Context(), PlaygroundRequest{
-			Input:        job.Config.Input,
-			Workflow:     job.Config.Workflow,
-			Tools:        job.Config.Tools,
-			SystemPrompt: job.Config.SystemPrompt,
-			ReplyTo:      job.Config.ReplyTo,
-		})
+		output, err := s.cfg.Scheduler.Trigger(name)
+		status := "completed"
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
+			status = "failed"
 		}
-		s.audit(r.Context(), p, "cron.trigger", "cron", map[string]any{"name": name})
-		writeJSON(w, http.StatusOK, resp)
+		auditPayload := map[string]any{"name": name, "status": status}
+		if err != nil {
+			auditPayload["error"] = err.Error()
+		}
+		s.audit(r.Context(), p, "cron.trigger", "cron", auditPayload)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"name":   name,
+			"status": status,
+			"output": output,
+			"error":  errorString(err),
+		})
 
 	case r.Method == http.MethodPatch:
 		if p.Role.Rank() < auth.RoleOperator.Rank() {
@@ -160,4 +170,11 @@ func (s *Server) handleCronJobByName(w http.ResponseWriter, r *http.Request, p p
 		w.Header().Set("Allow", "GET, DELETE, POST, PATCH")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
