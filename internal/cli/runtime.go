@@ -22,6 +22,10 @@ func buildRuntimeService(ctx context.Context, store state.Store, opts uiOptions)
 	if store == nil {
 		return nil, func() {}
 	}
+	if !opts.runtimeEnabled && opts.redisAddr == "" {
+		// Runtime queue is opt-in unless explicitly enabled or configured.
+		return nil, func() {}
+	}
 
 	attemptStore, err := distributed.NewSQLiteAttemptStore(opts.attemptsPath)
 	if err != nil {
@@ -38,7 +42,7 @@ func buildRuntimeService(ctx context.Context, store state.Store, opts uiOptions)
 	)
 	if err != nil {
 		_ = attemptStore.Close()
-		log.Printf("runtime queue unavailable: %v", err)
+		log.Printf("runtime queue unavailable (continuing without distributed runtime): %v", err)
 		return nil, func() {}
 	}
 

@@ -46,6 +46,7 @@ type uiOptions struct {
 	redisDB          int
 	queuePrefix      string
 	queueGroup       string
+	runtimeEnabled   bool
 	requireAPIKey    bool
 	allowLocalNoAuth bool
 	open             bool
@@ -300,6 +301,7 @@ func parseUIArgs(args []string, remoteMode bool) uiOptions {
 		redisDB:          config.ParseIntEnv("AGENT_REDIS_DB", 0),
 		queuePrefix:      strings.TrimSpace(os.Getenv("AGENT_RUNTIME_QUEUE_PREFIX")),
 		queueGroup:       strings.TrimSpace(os.Getenv("AGENT_RUNTIME_QUEUE_GROUP")),
+		runtimeEnabled:   parseBoolEnv("AGENT_RUNTIME_ENABLED", false),
 		requireAPIKey:    parseBoolEnv("AGENT_UI_REQUIRE_API_KEY", remoteMode),
 		allowLocalNoAuth: parseBoolEnv("AGENT_UI_ALLOW_LOCAL_NOAUTH", !remoteMode),
 		open:             parseBoolEnv("AGENT_UI_OPEN", false),
@@ -307,7 +309,7 @@ func parseUIArgs(args []string, remoteMode bool) uiOptions {
 	if opts.addr == "" {
 		opts.addr = "127.0.0.1:7070"
 	}
-	if opts.redisAddr == "" {
+	if opts.runtimeEnabled && opts.redisAddr == "" {
 		opts.redisAddr = "127.0.0.1:6379"
 	}
 	if opts.queuePrefix == "" {

@@ -659,8 +659,15 @@ func buildRuntime(ctx context.Context, store state.Store, o Options) (*runtimeCo
 		return nil, func() {}
 	}
 
+	runtimeEnabled := parseBoolEnv("AGENT_RUNTIME_ENABLED", false)
+	rawRedisAddr := strings.TrimSpace(os.Getenv("AGENT_REDIS_ADDR"))
+	if !runtimeEnabled && rawRedisAddr == "" {
+		// Runtime queue is opt-in unless explicitly enabled or configured.
+		return nil, func() {}
+	}
+
 	attemptsPath := filepath.Join(filepath.Dir(o.DBPath), "runtime.db")
-	redisAddr := strings.TrimSpace(os.Getenv("AGENT_REDIS_ADDR"))
+	redisAddr := rawRedisAddr
 	if redisAddr == "" {
 		redisAddr = "127.0.0.1:6379"
 	}
@@ -690,7 +697,7 @@ func buildRuntime(ctx context.Context, store state.Store, o Options) (*runtimeCo
 	)
 	if err != nil {
 		_ = attemptStore.Close()
-		log.Printf("runtime queue unavailable: %v", err)
+		log.Printf("runtime queue unavailable (continuing without distributed runtime): %v", err)
 		return nil, func() {}
 	}
 
