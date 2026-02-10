@@ -39,6 +39,68 @@ let currentRunEvents = [];
 let currentRunAttempts = [];
 let selectedGraphWorkflow = '';
 let playgroundSessionId = ''; // tracks multi-turn conversation session
+let playgroundConversation = [];
+let currentPrincipal = { role: 'viewer', keyId: '' };
+const HIDDEN_CONVERSATIONS_KEY = 'playground_hidden_conversations';
+
+const DEFAULT_WORKFLOW_SPEC = {
+  start: 'prepare',
+  nodes: [
+    { id: 'prepare', kind: 'template', outputKey: 'prompt', template: 'triage incident: {{input}}' },
+    { id: 'analyze', kind: 'agent', inputFrom: 'prompt', outputKey: 'analysis' },
+    { id: 'finalize', kind: 'output', from: 'data.analysis' },
+  ],
+  edges: [
+    { from: 'prepare', to: 'analyze' },
+    { from: 'analyze', to: 'finalize' },
+  ],
+};
+
+const roleRank = {
+  viewer: 1,
+  operator: 2,
+  admin: 3,
+};
+
+function canRole(minRole) {
+  const current = roleRank[String(currentPrincipal?.role || 'viewer')] || 0;
+  const required = roleRank[String(minRole || 'viewer')] || 1;
+  return current >= required;
+}
+
+async function loadPrincipal() {
+  try {
+    const me = await api.get('/api/v1/auth/me');
+    currentPrincipal = {
+      role: String(me?.role || 'viewer').toLowerCase(),
+      keyId: String(me?.keyId || ''),
+    };
+  } catch (_) {
+    currentPrincipal = { role: 'viewer', keyId: '' };
+  }
+  applyRBACUI();
+}
+
+function applyRBACUI() {
+  const badge = document.getElementById('rbacRoleBadge');
+  if (badge) {
+    badge.textContent = `role: ${currentPrincipal.role}`;
+  }
+
+  document.querySelectorAll('[data-requires-role]').forEach((el) => {
+    const minRole = el.getAttribute('data-requires-role') || 'viewer';
+    const allowed = canRole(minRole);
+    if (el.tagName === 'BUTTON') {
+      el.disabled = !allowed;
+      if (!allowed) {
+        el.title = `Requires ${minRole} role`;
+      }
+    }
+    if (!allowed && el.id === 'authKeysCard') {
+      el.style.display = 'none';
+    }
+  });
+}
 
 // ===== Utilities =====
 function formatDate(dateStr) {
@@ -115,17 +177,104 @@ function initTheme() {
 }
 
 // ===== Navigation =====
-function switchTab(tab) {
+function queryParam(name) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+function setQueryParams(params) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') return;
+    url.searchParams.set(key, String(value));
+  });
+  const query = url.searchParams.toString();
+  window.history.replaceState({}, '', query ? `${url.pathname}?${query}` : url.pathname);
+}
+
+function setQueryParam(name, value) {
+  const url = new URL(window.location.href);
+  if (!value) {
+    url.searchParams.delete(name);
+  } else {
+    url.searchParams.set(name, value);
+  }
+  const query = url.searchParams.toString();
+  window.history.replaceState({}, '', query ? `${url.pathname}?${query}` : url.pathname);
+}
+
+function setTabScopedQuery(tab) {
+  const params = { tab };
+  if (tab === 'runs') {
+    params.run = queryParam('run') || '';
+    params.runTab = queryParam('runTab') || 'overview';
+  }
+  if (tab === 'tools') {
+    params.toolsTab = queryParam('toolsTab') || 'builtin';
+  }
+  if (tab === 'graphs') {
+    params.graphWorkflow = queryParam('graphWorkflow') || '';
+    params.graphRun = queryParam('graphRun') || '';
+  }
+  if (tab === 'playground') {
+    params.pgFlow = queryParam('pgFlow') || '';
+    params.pgWorkflow = queryParam('pgWorkflow') || '';
+    params.pgPrompt = queryParam('pgPrompt') || '';
+    params.pgHistory = queryParam('pgHistory') || '';
+    params.pgPromptInput = queryParam('pgPromptInput') || '';
+  }
+  if (tab === 'actions') {
+    params.action = queryParam('action') || '';
+    params.actionType = queryParam('actionType') || '';
+    params.actionSearch = queryParam('actionSearch') || '';
+  }
+  if (tab === 'prompts') {
+    params.prompt = queryParam('prompt') || '';
+  }
+  setQueryParams(params);
+}
+
+function switchTab(tab, opts = {}) {
+  const updateQuery = opts.updateQuery !== false;
   if (!tab) return;
   if (tab === 'dashboard') tab = 'live';
+  if (!document.getElementById(`tab-${tab}`)) {
+    tab = 'live';
+  }
   document.querySelectorAll('.nav-item[data-tab]').forEach(n => {
     n.classList.toggle('active', n.getAttribute('data-tab') === tab);
   });
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(`tab-${tab}`)?.classList.add('active');
+  if (updateQuery) setTabScopedQuery(tab);
   if (tab === 'scheduler') loadCronJobs();
   if (tab === 'actions') loadActions();
+  if (tab === 'prompts') loadPrompts();
   if (tab === 'skills') loadSkills();
+}
+
+function switchRunTab(tab, opts = {}) {
+  const updateQuery = opts.updateQuery !== false;
+  if (!tab || !document.getElementById(`run-${tab}`)) {
+    tab = 'overview';
+  }
+  document.querySelectorAll('.run-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.run-tab[data-run-tab="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('.run-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`run-${tab}`)?.classList.add('active');
+  if (updateQuery) setQueryParam('runTab', tab);
+}
+
+function switchToolsTab(tab, opts = {}) {
+  const updateQuery = opts.updateQuery !== false;
+  if (!tab || !document.getElementById(`tools-${tab}`)) {
+    tab = 'builtin';
+  }
+  document.querySelectorAll('.tools-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tools-tab[data-tools-tab="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('.tools-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tools-${tab}`)?.classList.add('active');
+  if (updateQuery) setQueryParam('toolsTab', tab);
 }
 
 function initNavigation() {
@@ -140,12 +289,7 @@ function initNavigation() {
   document.querySelectorAll('[data-run-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.getAttribute('data-run-tab');
-
-      document.querySelectorAll('.run-tab').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-
-      document.querySelectorAll('.run-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById(`run-${tab}`)?.classList.add('active');
+      switchRunTab(tab);
     });
   });
 
@@ -153,13 +297,18 @@ function initNavigation() {
   document.querySelectorAll('[data-tools-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.getAttribute('data-tools-tab');
-
-      document.querySelectorAll('.tools-tab').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-
-      document.querySelectorAll('.tools-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById(`tools-${tab}`)?.classList.add('active');
+      switchToolsTab(tab);
     });
+  });
+
+  switchTab(queryParam('tab') || 'live', { updateQuery: false });
+  switchRunTab(queryParam('runTab') || 'overview', { updateQuery: false });
+  switchToolsTab(queryParam('toolsTab') || 'builtin', { updateQuery: false });
+
+  window.addEventListener('popstate', () => {
+    switchTab(queryParam('tab') || 'live', { updateQuery: false });
+    switchRunTab(queryParam('runTab') || 'overview', { updateQuery: false });
+    switchToolsTab(queryParam('toolsTab') || 'builtin', { updateQuery: false });
   });
 }
 
@@ -306,6 +455,11 @@ async function loadRuns() {
       });
     });
     syncGraphRunOptions(runs);
+
+    const runFromQuery = queryParam('run');
+    if (!currentRun && runFromQuery && runs.some((r) => runIdOf(r) === runFromQuery)) {
+      selectRun(runFromQuery);
+    }
   } catch (e) {
     container.innerHTML = '<div class="empty-state"><p>Failed to load runs</p></div>';
   }
@@ -313,6 +467,7 @@ async function loadRuns() {
 
 async function selectRun(runId) {
   currentRun = runId;
+  setQueryParam('run', runId || '');
 
   // Update selection UI
   document.querySelectorAll('.run-item').forEach(item => {
@@ -903,6 +1058,10 @@ function syncPlaygroundWorkflowOptions(workflowNames) {
   if (previous && Array.from(select.options).some(o => o.value === previous)) {
     select.value = previous;
   }
+  const workflowFromQuery = queryParam('pgWorkflow');
+  if (workflowFromQuery && Array.from(select.options).some((o) => o.value === workflowFromQuery)) {
+    select.value = workflowFromQuery;
+  }
 }
 
 function setPlaygroundWorkflow(name) {
@@ -923,7 +1082,8 @@ function syncGraphWorkflowOptions(workflowNames) {
   if (!select) return;
   const names = Array.from(new Set((workflowNames || []).filter(Boolean)));
   if (!names.length) return;
-  const previous = selectedGraphWorkflow || select.value;
+  const fromQuery = queryParam('graphWorkflow');
+  const previous = fromQuery || selectedGraphWorkflow || select.value;
   select.innerHTML = names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
   selectedGraphWorkflow = names.includes(previous) ? previous : names[0];
   select.value = selectedGraphWorkflow;
@@ -933,12 +1093,16 @@ function syncGraphRunOptions(runRows) {
   const select = document.getElementById('graphRunSelect');
   if (!select) return;
   const rows = Array.isArray(runRows) ? runRows : [];
+  const previous = queryParam('graphRun') || select.value || '';
   const options = [`<option value="">None</option>`];
   rows.slice(0, 80).forEach((run) => {
     const runID = runIdOf(run);
     options.push(`<option value="${escapeHtml(runID)}">${escapeHtml(truncate(runID, 20))} • ${escapeHtml(runStatusOf(run))}</option>`);
   });
   select.innerHTML = options.join('');
+  if (previous && Array.from(select.options).some((o) => o.value === previous)) {
+    select.value = previous;
+  }
 }
 
 let topologyZoom = 1;
@@ -1014,9 +1178,11 @@ async function loadWorkflowTopology() {
   const workflowName = workflowSelect.value || selectedGraphWorkflow || '';
   if (!workflowName) return;
   selectedGraphWorkflow = workflowName;
+  setQueryParam('graphWorkflow', workflowName);
   // Reset zoom and pan when switching workflows
   resetTopologyView();
   const runID = runSelect?.value || '';
+  setQueryParam('graphRun', runID);
   try {
     const topology = await api.get(`/api/v1/workflows/${encodeURIComponent(workflowName)}/topology`).catch(() => ({ nodes: [], edges: [] }));
     const nodes = Array.isArray(topology?.nodes) ? topology.nodes : [];
@@ -1151,6 +1317,62 @@ async function loadWorkflows() {
     });
   } catch (e) {
     container.innerHTML = '<div class="empty-state"><p>Failed to load workflows</p></div>';
+  }
+}
+
+function toggleWorkflowCreateForm(forceOpen = null) {
+  if (!canRole('operator')) return;
+  const panel = document.getElementById('workflowCreateForm');
+  if (!panel) return;
+  const shouldOpen = forceOpen === null ? panel.style.display === 'none' : Boolean(forceOpen);
+  panel.style.display = shouldOpen ? 'block' : 'none';
+  if (!shouldOpen) return;
+
+  const specInput = document.getElementById('workflowCreateSpec');
+  if (specInput && !specInput.value.trim()) {
+    specInput.value = JSON.stringify(DEFAULT_WORKFLOW_SPEC, null, 2);
+  }
+}
+
+async function createWorkflowFromUI() {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
+  const nameInput = document.getElementById('workflowCreateName');
+  const descriptionInput = document.getElementById('workflowCreateDescription');
+  const specInput = document.getElementById('workflowCreateSpec');
+  if (!nameInput || !specInput) return;
+
+  const name = String(nameInput.value || '').trim();
+  const description = String(descriptionInput?.value || '').trim();
+  if (!name) {
+    alert('Workflow name is required');
+    return;
+  }
+
+  let spec;
+  try {
+    spec = JSON.parse(specInput.value || '{}');
+  } catch (e) {
+    alert('Invalid workflow JSON: ' + (e.message || e));
+    return;
+  }
+
+  try {
+    await api.post('/api/v1/workflows/registry', {
+      name,
+      description,
+      persist: true,
+      spec,
+    });
+    alert(`Workflow ${name} created`);
+    nameInput.value = '';
+    if (descriptionInput) descriptionInput.value = '';
+    toggleWorkflowCreateForm(false);
+    await loadWorkflows();
+  } catch (e) {
+    alert('Failed to create workflow: ' + (e.message || e));
   }
 }
 
@@ -1328,6 +1550,10 @@ async function loadQueueEvents() {
 async function loadAuthKeys() {
   const container = document.getElementById('authKeysList');
   if (!container) return;
+  if (!canRole('admin')) {
+    container.innerHTML = '<div class="empty-state"><p>Admin role required to view keys</p></div>';
+    return;
+  }
 
   try {
     const keys = await api.get('/api/v1/auth/keys');
@@ -1376,6 +1602,61 @@ async function loadAuditLogs() {
 function initSettings() {
   const apiKeyInput = document.getElementById('apiKeyInput');
   const saveApiKeyBtn = document.getElementById('saveApiKey');
+  const providerSelect = document.getElementById('providerSelect');
+  const providerApiKeyInput = document.getElementById('providerApiKeyInput');
+  const providerModelSelect = document.getElementById('providerModelSelect');
+  const refreshProviderModels = document.getElementById('refreshProviderModels');
+  const saveProviderSettings = document.getElementById('saveProviderSettings');
+  const providerKeyHelp = document.getElementById('providerKeyHelp');
+  const providerModelHelp = document.getElementById('providerModelHelp');
+
+  const providerKeyMap = {
+    gemini: 'GEMINI_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    azureopenai: 'AZURE_OPENAI_API_KEY',
+    ollama: 'OLLAMA_API_KEY',
+  };
+  const providerModelMap = {
+    gemini: 'GEMINI_MODEL',
+    openai: 'OPENAI_MODEL',
+    anthropic: 'ANTHROPIC_MODEL',
+    azureopenai: 'AZURE_OPENAI_MODEL',
+    ollama: 'OLLAMA_MODEL',
+  };
+
+  const loadProviderModels = async (provider, currentModel = '') => {
+    if (!providerModelSelect) return;
+    providerModelSelect.innerHTML = '<option value="">(auto/default)</option>';
+    try {
+      const data = await api.get(`/api/v1/settings/provider-models?provider=${encodeURIComponent(provider)}`);
+      const models = Array.isArray(data?.models) ? data.models : [];
+      models.forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = String(m || '').trim();
+        opt.textContent = String(m || '').trim();
+        providerModelSelect.appendChild(opt);
+      });
+      const selected = String(currentModel || data?.current || '').trim();
+      if (selected && [...providerModelSelect.options].some((o) => o.value === selected)) {
+        providerModelSelect.value = selected;
+      } else if (selected) {
+        const custom = document.createElement('option');
+        custom.value = selected;
+        custom.textContent = `${selected} (current)`;
+        providerModelSelect.appendChild(custom);
+        providerModelSelect.value = selected;
+      }
+      if (providerModelHelp) {
+        const source = data?.source ? `list source: ${data.source}` : 'list source: fallback';
+        providerModelHelp.textContent = `Sets ${providerModelMap[provider] || 'MODEL'} (${source})`;
+      }
+    } catch (e) {
+      if (providerModelHelp) {
+        providerModelHelp.textContent = `Could not load model list (${e.message || e})`;
+      }
+    }
+  };
 
   if (apiKeyInput && saveApiKeyBtn) {
     // Load saved key
@@ -1397,6 +1678,62 @@ function initSettings() {
       }
     });
   }
+
+  const refreshProviderSettings = async () => {
+    if (!providerSelect) return;
+    try {
+      const res = await api.get('/api/v1/settings/provider-env');
+      const provider = String(res?.values?.AGENT_PROVIDER || 'gemini').trim();
+      providerSelect.value = provider || 'gemini';
+      const envKey = providerKeyMap[providerSelect.value] || providerKeyMap.gemini;
+      const modelKey = providerModelMap[providerSelect.value] || providerModelMap.gemini;
+      const hasKey = Boolean(res?.configured?.[envKey]);
+      if (providerApiKeyInput) {
+        providerApiKeyInput.value = '';
+        providerApiKeyInput.placeholder = hasKey ? 'Saved (enter new key to rotate)' : 'Enter provider API key...';
+      }
+      await loadProviderModels(providerSelect.value, String(res?.values?.[modelKey] || '').trim());
+      if (providerKeyHelp) {
+        providerKeyHelp.textContent = `${envKey} ${hasKey ? '(configured)' : '(not configured)'}`;
+      }
+    } catch (e) {
+      if (providerKeyHelp) providerKeyHelp.textContent = 'Provider settings unavailable';
+      if (providerModelHelp) providerModelHelp.textContent = 'Provider model setting unavailable';
+    }
+  };
+
+  providerSelect?.addEventListener('change', refreshProviderSettings);
+  refreshProviderModels?.addEventListener('click', () => {
+    const p = String(providerSelect?.value || 'gemini').trim();
+    const current = String(providerModelSelect?.value || '').trim();
+    loadProviderModels(p, current);
+  });
+  saveProviderSettings?.addEventListener('click', async () => {
+    if (!canRole('operator')) {
+      alert('Operator role required');
+      return;
+    }
+    if (!providerSelect) return;
+    const provider = String(providerSelect.value || 'gemini').trim();
+    const envKey = providerKeyMap[provider] || providerKeyMap.gemini;
+    const modelKey = providerModelMap[provider] || providerModelMap.gemini;
+    const apiKey = String(providerApiKeyInput?.value || '').trim();
+    const model = String(providerModelSelect?.value || '').trim();
+    const values = { AGENT_PROVIDER: provider };
+    if (apiKey) values[envKey] = apiKey;
+    values[modelKey] = model;
+    try {
+      await api.request('/api/v1/settings/provider-env', {
+        method: 'PUT',
+        body: JSON.stringify({ values }),
+      });
+      alert('Provider settings saved');
+      await refreshProviderSettings();
+    } catch (e) {
+      alert('Failed to save provider settings: ' + (e.message || e));
+    }
+  });
+  refreshProviderSettings();
 }
 
 // ===== Search =====
@@ -1550,23 +1887,237 @@ function setInputMode(mode) {
 // Make setInputMode available globally for onclick handler
 window.setInputMode = setInputMode;
 
-function appendChatMessage(role, content, meta) {
+function appendChatMessage(role, content, meta, extrasHtml = '') {
   const messages = document.getElementById('chatMessages');
   if (!messages) return;
   const welcome = messages.querySelector('.chat-welcome');
   if (welcome) welcome.remove();
   const roleClass = role === 'user' ? 'user' : 'assistant';
-  const safeContent = escapeHtml(content || '');
+  const safeContent = role === 'assistant'
+    ? formatAssistantContent(content || '')
+    : escapeHtml(content || '').replace(/\n/g, '<br/>');
   const safeMeta = escapeHtml(meta || '');
   const item = document.createElement('div');
   item.className = `chat-bubble ${roleClass}`;
   item.innerHTML = `
     <div class="chat-bubble-role">${role === 'user' ? 'You' : 'Agent'}</div>
-    <div class="chat-bubble-content">${safeContent.replace(/\n/g, '<br/>')}</div>
+    <div class="chat-bubble-content">${safeContent}</div>
+    ${extrasHtml || ''}
     ${safeMeta ? `<div class="chat-bubble-meta">${safeMeta}</div>` : ''}
   `;
   messages.appendChild(item);
   messages.scrollTop = messages.scrollHeight;
+
+  if (role === 'user' || role === 'assistant') {
+    playgroundConversation.push({ role, content: String(content || '') });
+    if (playgroundConversation.length > 24) {
+      playgroundConversation = playgroundConversation.slice(playgroundConversation.length - 24);
+    }
+  }
+}
+
+function extractDocumentArtifacts(value) {
+  const artifacts = [];
+  const seen = new Set();
+
+  const isDocLikeURL = (u) => {
+    const urlStr = String(u || '').trim();
+    if (!urlStr) return false;
+    if (urlStr.startsWith('/api/v1/files/view') || urlStr.startsWith('/api/v1/files/download')) return true;
+    if (/docs\.google\.com\/document\//i.test(urlStr)) return true;
+    if (/\.pdf([?#].*)?$/i.test(urlStr)) return true;
+    return false;
+  };
+
+  const pushArtifact = (item) => {
+    const key = JSON.stringify(item);
+    if (seen.has(key)) return;
+    seen.add(key);
+    artifacts.push(item);
+  };
+
+  const pushURL = (url) => {
+    const u = String(url || '').trim();
+    if (!u) return;
+    if (!/^https?:\/\//i.test(u) && !u.startsWith('/')) return;
+    if (!isDocLikeURL(u)) return;
+    if (/\/download/i.test(u) || /format=pdf/i.test(u)) {
+      pushArtifact({ type: 'link', label: 'Document', view: u, download: u });
+      return;
+    }
+    if (u.startsWith('/api/v1/files/view')) {
+      pushArtifact({ type: 'link', label: 'Generated File', view: u, download: u.replace('/view?', '/download?') });
+      return;
+    }
+    if (u.startsWith('/api/v1/files/download')) {
+      pushArtifact({ type: 'link', label: 'Generated File', view: u.replace('/download?', '/view?'), download: u });
+      return;
+    }
+    if (/docs\.google\.com\/document\//i.test(u)) {
+      const pdfURL = u.includes('/export?') ? u : u.replace(/\/edit.*$/i, '') + '/export?format=pdf';
+      pushArtifact({ type: 'link', label: 'Google Doc', view: u, download: pdfURL });
+      return;
+    }
+    pushArtifact({ type: 'link', label: 'Document', view: u, download: u });
+  };
+
+  const pushPath = (path) => {
+    const p = String(path || '').trim();
+    if (!p) return;
+    const hasDocExt = /\.(pdf|md|markdown|txt|html?)$/i.test(p);
+    if (!hasDocExt) return;
+    const view = `/api/v1/files/view?path=${encodeURIComponent(p)}`;
+    const download = `/api/v1/files/download?path=${encodeURIComponent(p)}`;
+    pushArtifact({
+      type: 'file',
+      label: p.split(/[\\/]/).pop() || p,
+      path: p,
+      view,
+      download,
+    });
+  };
+
+  const scanString = (text) => {
+    const s = String(text || '');
+    const urlMatches = s.match(/(?:https?:\/\/[^\s"'`<>]+|\/api\/v1\/files\/(?:view|download)\?path=[^\s"'`<>]+)/g) || [];
+    urlMatches.forEach(pushURL);
+    const pathMatches = s.match(/(?:\.{1,2}\/|\/)[^\s"'`<>]+\.(?:pdf|md|markdown|txt|html?)/gi) || [];
+    pathMatches.forEach(pushPath);
+  };
+
+  const walk = (v) => {
+    if (v == null) return;
+    if (typeof v === 'string') {
+      scanString(v);
+      return;
+    }
+    if (Array.isArray(v)) {
+      v.forEach(walk);
+      return;
+    }
+    if (typeof v === 'object') {
+      Object.entries(v).forEach(([k, val]) => {
+        const key = String(k || '').toLowerCase();
+        if (key.includes('output_path') || key === 'path' || key.endsWith('_path')) {
+          pushPath(val);
+        }
+        if (key.includes('url') || key.includes('link')) {
+          pushURL(val);
+        }
+        walk(val);
+      });
+    }
+  };
+
+  walk(value);
+  // If explicit artifacts are present, avoid noisy generic URL captures.
+  if (artifacts.length > 0) {
+    const explicit = artifacts.filter((a) => a.type === 'file' || a.type === 'link');
+    if (explicit.length > 0) return explicit.slice(0, 6);
+  }
+  return artifacts.slice(0, 6);
+}
+
+function artifactActionsHTML(artifacts) {
+  if (!Array.isArray(artifacts) || !artifacts.length) return '';
+  const rows = artifacts.map((a, idx) => {
+    if (a.type === 'link') {
+      const view = escapeHtml(String(a.view || ''));
+      const download = escapeHtml(String(a.download || a.view || ''));
+      const label = escapeHtml(String(a.label || `Doc Link ${idx + 1}`));
+      return `<div class="artifact-row"><span class="artifact-name">${label}</span><div class="artifact-actions"><a class="btn btn-ghost btn-sm" href="${view}" target="_blank" rel="noopener noreferrer">View</a><a class="btn btn-ghost btn-sm" href="${download}" target="_blank" rel="noopener noreferrer">Download</a></div></div>`;
+    }
+    const view = escapeHtml(String(a.view || ''));
+    const dl = escapeHtml(String(a.download || ''));
+    const label = escapeHtml(String(a.label || `Generated File ${idx + 1}`));
+    return `<div class="artifact-row"><span class="artifact-name">${label}</span><div class="artifact-actions"><a class="btn btn-ghost btn-sm" href="${view}" target="_blank" rel="noopener noreferrer">View</a><a class="btn btn-ghost btn-sm" href="${dl}">Download</a></div></div>`;
+  }).join('');
+  return `<div class="chat-artifacts"><div class="chat-artifacts-title">Generated Documents</div>${rows}</div>`;
+}
+
+function conversationPayload() {
+  return playgroundConversation
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+    .map((m) => ({ role: m.role, content: String(m.content || '') }));
+}
+
+function playgroundPromptInputPayload() {
+  const raw = document.getElementById('playgroundPromptInput')?.value?.trim() || '';
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch (_) {
+    return undefined;
+  }
+  return undefined;
+}
+
+function formatAssistantContent(raw) {
+  const escaped = escapeHtml(String(raw || ''));
+  const codeBlocks = [];
+  const withPlaceholders = escaped.replace(/```([a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const token = `__CODE_BLOCK_${codeBlocks.length}__`;
+    const language = (lang || '').trim();
+    const className = language ? ` language-${language}` : '';
+    codeBlocks.push(`<pre class="chat-code"><code class="${className.trim()}">${code.trim()}</code></pre>`);
+    return token;
+  });
+
+  const lines = withPlaceholders.split('\n');
+  const out = [];
+  let listOpen = false;
+
+  const flushList = () => {
+    if (listOpen) {
+      out.push('</ul>');
+      listOpen = false;
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushList();
+      const level = heading[1].length;
+      out.push(`<div class="chat-h${level}">${formatInline(heading[2])}</div>`);
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      if (!listOpen) {
+        out.push('<ul class="chat-list">');
+        listOpen = true;
+      }
+      out.push(`<li>${formatInline(bullet[1])}</li>`);
+      continue;
+    }
+
+    flushList();
+    out.push(`<p class="chat-paragraph">${formatInline(trimmed)}</p>`);
+  }
+  flushList();
+
+  let html = out.join('');
+  codeBlocks.forEach((block, idx) => {
+    html = html.replace(`__CODE_BLOCK_${idx}__`, block);
+  });
+  return html || '<p class="chat-paragraph">(empty response)</p>';
+}
+
+function formatInline(text) {
+  return String(text || '')
+    .replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
 
 async function sendPlaygroundMessage() {
@@ -1577,6 +2128,7 @@ async function sendPlaygroundMessage() {
   if (!prompt) return;
 
   const flowName = document.getElementById('playgroundFlow')?.value || '';
+  const promptRef = document.getElementById('playgroundPromptRef')?.value || '';
   const workflow = document.getElementById('playgroundWorkflow')?.value || '';
   const tools = Array.from(document.getElementById('playgroundTools')?.selectedOptions || []).map(o => o.value);
   const skills = Array.from(document.getElementById('playgroundSkills')?.selectedOptions || []).map(o => o.value);
@@ -1591,6 +2143,9 @@ async function sendPlaygroundMessage() {
   const payload = {
     input: prompt,
     sessionId: playgroundSessionId || undefined,
+    history: conversationPayload(),
+    promptRef: promptRef || undefined,
+    promptInput: playgroundPromptInputPayload(),
     flow: flowName || undefined,
     workflow,
     tools,
@@ -1618,7 +2173,8 @@ async function sendPlaygroundMessage() {
       response?.runId ? `run=${response.runId}` : '',
       response?.sessionId ? `session=${response.sessionId}` : '',
     ].filter(Boolean).join(' • ');
-    appendChatMessage('assistant', response?.output || '(empty response)', meta);
+    const artifacts = extractDocumentArtifacts(response);
+    appendChatMessage('assistant', response?.output || '(empty response)', meta, artifactActionsHTML(artifacts));
     if (playgroundHistoryVisible) loadPlaygroundHistory();
   } catch (e) {
     removeStreamingProgress(progressEl);
@@ -1641,12 +2197,20 @@ function appendStreamingProgress() {
   el.className = 'chat-bubble assistant streaming-progress';
   el.innerHTML = `
     <div class="chat-bubble-role">Agent</div>
+    <div class="streaming-output"></div>
     <div class="streaming-steps"></div>
     <div class="streaming-spinner">⏳ Processing...</div>
   `;
   messages.appendChild(el);
   messages.scrollTop = messages.scrollHeight;
   return el;
+}
+
+function appendStreamingDelta(el, text) {
+  if (!el) return;
+  const out = el.querySelector('.streaming-output');
+  if (!out) return;
+  out.textContent = (out.textContent || '') + String(text || '');
 }
 
 function removeStreamingProgress(el) {
@@ -1732,6 +2296,8 @@ async function streamPlaygroundRun(payload, progressEl) {
           const data = JSON.parse(dataLines.join('\n'));
           if (eventType === 'progress') {
             updateStreamingProgress(progressEl, data);
+          } else if (eventType === 'delta') {
+            appendStreamingDelta(progressEl, data?.text || '');
           } else if (eventType === 'complete') {
             finalResponse = data;
           }
@@ -1751,6 +2317,79 @@ async function streamPlaygroundRun(payload, progressEl) {
 function autoResizeTextarea(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+function setAllOptions(selectEl, selected) {
+  if (!selectEl) return;
+  [...selectEl.options].forEach((opt) => {
+    if (!opt.disabled) opt.selected = Boolean(selected);
+  });
+}
+
+function selectValues(selectEl, values) {
+  if (!selectEl) return;
+  const set = new Set(values || []);
+  [...selectEl.options].forEach((opt) => {
+    opt.selected = set.has(opt.value);
+  });
+}
+
+function applySupportMode() {
+  const flow = document.getElementById('playgroundFlow');
+  const workflow = document.getElementById('playgroundWorkflow');
+  const tools = document.getElementById('playgroundTools');
+  const skills = document.getElementById('playgroundSkills');
+  const guardrails = document.getElementById('playgroundGuardrails');
+  const promptRef = document.getElementById('playgroundPromptRef');
+  const promptVars = document.getElementById('playgroundPromptInput');
+  const systemPrompt = document.getElementById('playgroundSystemPrompt');
+
+  if (flow && [...flow.options].some((o) => o.value === 'support-engineer')) {
+    flow.value = 'support-engineer';
+    onFlowSelected();
+  }
+  if (workflow) workflow.value = 'summary-memory';
+  if (promptRef && [...promptRef.options].some((o) => o.value === 'support-agent@v1')) {
+    promptRef.value = 'support-agent@v1';
+    setQueryParam('pgPrompt', 'support-agent@v1');
+  }
+  if (promptVars) {
+    promptVars.value = JSON.stringify({ department: 'customer-support', style: 'empathetic and concise' }, null, 2);
+    setQueryParam('pgPromptInput', '1');
+  }
+  if (systemPrompt) systemPrompt.value = '';
+
+  const toolValues = ['@default', '@network', '@docs'];
+  selectValues(tools, toolValues.filter((v) => [...(tools?.options || [])].some((o) => o.value === v)));
+
+  const skillValues = ['document-manager', 'research-planner', 'pdf-reporting'];
+  selectValues(skills, skillValues.filter((v) => [...(skills?.options || [])].some((o) => o.value === v)));
+
+  const guardrailValues = ['prompt_injection', 'pii_filter', 'secret_guard', 'content_filter'];
+  selectValues(guardrails, guardrailValues.filter((v) => [...(guardrails?.options || [])].some((o) => o.value === v)));
+
+  alert('Support mode applied');
+}
+
+function resetSupportMode() {
+  const flow = document.getElementById('playgroundFlow');
+  const workflow = document.getElementById('playgroundWorkflow');
+  const promptRef = document.getElementById('playgroundPromptRef');
+  const promptVars = document.getElementById('playgroundPromptInput');
+  const systemPrompt = document.getElementById('playgroundSystemPrompt');
+  if (flow) {
+    flow.value = '';
+    onFlowSelected();
+  }
+  if (workflow) workflow.value = 'basic';
+  if (promptRef) promptRef.value = '';
+  if (promptVars) promptVars.value = '';
+  if (systemPrompt) systemPrompt.value = '';
+  selectDefaultPlaygroundTools();
+  setAllOptions(document.getElementById('playgroundSkills'), false);
+  setAllOptions(document.getElementById('playgroundGuardrails'), false);
+  setQueryParam('pgPrompt', '');
+  setQueryParam('pgPromptInput', '');
 }
 
 function initPlayground() {
@@ -1774,16 +2413,37 @@ function initPlayground() {
 
   // Load graph preview when workflow changes
   const workflowSelect = document.getElementById('playgroundWorkflow');
-  workflowSelect?.addEventListener('change', loadPlaygroundGraphPreview);
+  workflowSelect?.addEventListener('change', () => {
+    setQueryParam('pgWorkflow', workflowSelect?.value || '');
+    loadPlaygroundGraphPreview();
+  });
   loadPlaygroundGraphPreview();
 
   // Load flows and wire up selector
   const flowSelect = document.getElementById('playgroundFlow');
   flowSelect?.addEventListener('change', onFlowSelected);
+  const promptRefSelect = document.getElementById('playgroundPromptRef');
+  promptRefSelect?.addEventListener('change', () => {
+    setQueryParam('pgPrompt', promptRefSelect?.value || '');
+  });
+  const promptInput = document.getElementById('playgroundPromptInput');
+  promptInput?.addEventListener('input', () => {
+    setQueryParam('pgPromptInput', promptInput.value.trim() ? '1' : '');
+  });
   loadFlows();
   loadToolCatalog();
   loadSkillsCatalog();
   loadGuardrailsCatalog();
+  loadPromptsCatalog();
+
+  const skillsSelect = document.getElementById('playgroundSkills');
+  const guardrailsSelect = document.getElementById('playgroundGuardrails');
+  document.getElementById('selectAllSkills')?.addEventListener('click', () => setAllOptions(skillsSelect, true));
+  document.getElementById('clearAllSkills')?.addEventListener('click', () => setAllOptions(skillsSelect, false));
+  document.getElementById('selectAllGuardrails')?.addEventListener('click', () => setAllOptions(guardrailsSelect, true));
+  document.getElementById('clearAllGuardrails')?.addEventListener('click', () => setAllOptions(guardrailsSelect, false));
+  document.getElementById('supportModeBtn')?.addEventListener('click', applySupportMode);
+  document.getElementById('resetModeBtn')?.addEventListener('click', resetSupportMode);
 }
 
 let _loadedFlows = [];
@@ -1799,6 +2459,7 @@ async function loadFlows() {
     const flows = Array.isArray(data?.flows) ? data.flows : [];
     _loadedFlows = flows;
     const defaultFlow = configData?.defaultFlow || '';
+    const flowFromQuery = queryParam('pgFlow') || '';
     // Keep the (none) option, add flows
     select.innerHTML = '<option value="">(none — configure manually)</option>';
     flows.forEach(f => {
@@ -1809,7 +2470,10 @@ async function loadFlows() {
       select.appendChild(opt);
     });
     // Trigger flow selection if a default is set
-    if (defaultFlow && flows.some(f => f.name === defaultFlow)) {
+    if (flowFromQuery && flows.some((f) => f.name === flowFromQuery)) {
+      select.value = flowFromQuery;
+      onFlowSelected();
+    } else if (defaultFlow && flows.some(f => f.name === defaultFlow)) {
       onFlowSelected();
     }
   } catch (e) {
@@ -1835,7 +2499,7 @@ async function loadToolCatalog() {
         opt.value = b.name;
         opt.textContent = `${b.name}  (${b.tools.length} tools)`;
         opt.title = b.description + '\nTools: ' + b.tools.join(', ');
-        if (b.name === '@default') opt.selected = true;
+        if (b.name === '@default' || b.name === '@scheduling') opt.selected = true;
         grp.appendChild(opt);
       });
       select.appendChild(grp);
@@ -1862,6 +2526,24 @@ async function loadToolCatalog() {
   } catch (e) {
     // Fallback to hardcoded defaults
     select.innerHTML = '<option value="@default" selected>@default</option><option value="@all">@all</option>';
+  }
+}
+
+function selectDefaultPlaygroundTools() {
+  const ts = document.getElementById('playgroundTools');
+  if (!ts) return;
+  const hasDefault = [...ts.options].some((o) => o.value === '@default');
+  const hasScheduling = [...ts.options].some((o) => o.value === '@scheduling');
+  [...ts.options].forEach((o) => {
+    o.selected = o.value === '@default' || o.value === '@scheduling';
+  });
+  if (!hasDefault && ts.options[0]) {
+    ts.options[0].selected = true;
+  }
+  if (!hasScheduling && hasDefault) {
+    [...ts.options].forEach((o) => {
+      if (o.value === '@default') o.selected = true;
+    });
   }
 }
 
@@ -1911,6 +2593,29 @@ async function loadGuardrailsCatalog() {
   }
 }
 
+async function loadPromptsCatalog() {
+  const select = document.getElementById('playgroundPromptRef');
+  if (!select) return;
+  try {
+    const data = await api.get('/api/v1/prompts');
+    const prompts = Array.isArray(data?.prompts) ? data.prompts : [];
+    const fromQuery = queryParam('pgPrompt') || '';
+    select.innerHTML = '<option value="">(none)</option>';
+    prompts.forEach((p) => {
+      const ref = p.ref || `${p.name}@${p.version || 'v1'}`;
+      const opt = document.createElement('option');
+      opt.value = ref;
+      opt.textContent = `${ref}${p.description ? ` - ${p.description}` : ''}`;
+      select.appendChild(opt);
+    });
+    if (fromQuery && [...select.options].some((o) => o.value === fromQuery)) {
+      select.value = fromQuery;
+    }
+  } catch (_) {
+    select.innerHTML = '<option value="">(none)</option>';
+  }
+}
+
 function onFlowSelected() {
   const select = document.getElementById('playgroundFlow');
   const flowInfo = document.getElementById('playgroundFlowInfo');
@@ -1919,9 +2624,11 @@ function onFlowSelected() {
   const badge = document.getElementById('configBadge');
   const details = document.getElementById('playgroundConfigDetails');
   const name = select?.value || '';
+  setQueryParam('pgFlow', name || '');
 
   // Reset conversation session when flow changes.
   playgroundSessionId = '';
+  playgroundConversation = [];
   const chatMessages = document.getElementById('chatMessages');
   if (chatMessages) {
     chatMessages.innerHTML = '<div class="chat-welcome"><p>Send a message to begin a new conversation.</p></div>';
@@ -1933,8 +2640,7 @@ function onFlowSelected() {
     // Reset config fields
     const sp = document.getElementById('playgroundSystemPrompt');
     if (sp) sp.value = '';
-    const ts = document.getElementById('playgroundTools');
-    if (ts) [...ts.options].forEach(o => { o.selected = o.value === '@default'; });
+    selectDefaultPlaygroundTools();
     const ss = document.getElementById('playgroundSkills');
     if (ss) [...ss.options].forEach(o => { o.selected = false; });
     const ci = document.getElementById('chatInput');
@@ -2023,11 +2729,38 @@ function onFlowSelected() {
   }
 }
 
+function openCronActionPreset() {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
+  switchTab('actions');
+  loadActions().then(() => {
+    filterActionsByType('tool');
+    selectAction('/tool/cron_manager');
+    setActionInputMode('json');
+    const actionJson = document.getElementById('actionJsonInput');
+    if (actionJson) {
+      actionJson.value = JSON.stringify({
+        operation: 'add',
+        name: 'pipeops-domain-check',
+        cronExpr: '* * * * *',
+        config: {
+          input: 'Check https://pipeops.com with curl and report status code and final URL.',
+          tools: ['@network'],
+          systemPrompt: 'You are a site uptime checker. Return one concise line.',
+        },
+      }, null, 2);
+    }
+  }).catch(() => {});
+}
+
 async function sendJsonPayload() {
   const textarea = document.getElementById('jsonPayloadInput');
   const sendBtn = document.getElementById('sendJsonPayload');
   const resultDiv = document.getElementById('jsonResultOutput');
   const resultContent = document.getElementById('jsonResultContent');
+  const resultArtifacts = document.getElementById('jsonResultArtifacts');
   if (!textarea || !sendBtn) return;
 
   const raw = textarea.value.trim();
@@ -2046,6 +2779,7 @@ async function sendJsonPayload() {
   sendBtn.textContent = 'Running...';
 
   const flowName = document.getElementById('playgroundFlow')?.value || '';
+  const promptRef = document.getElementById('playgroundPromptRef')?.value || '';
   const workflow = document.getElementById('playgroundWorkflow')?.value || '';
   const tools = Array.from(document.getElementById('playgroundTools')?.selectedOptions || []).map(o => o.value);
   const skills = Array.from(document.getElementById('playgroundSkills')?.selectedOptions || []).map(o => o.value);
@@ -2055,6 +2789,9 @@ async function sendJsonPayload() {
   const payload = {
     input: typeof parsed === 'string' ? parsed : (parsed.input || JSON.stringify(parsed)),
     sessionId: playgroundSessionId || undefined,
+    history: conversationPayload(),
+    promptRef: promptRef || undefined,
+    promptInput: playgroundPromptInputPayload(),
     flow: flowName || undefined,
     workflow,
     tools,
@@ -2073,11 +2810,20 @@ async function sendJsonPayload() {
     if (resultContent) {
       resultContent.textContent = JSON.stringify(response, null, 2);
     }
+    if (resultArtifacts) {
+      const html = artifactActionsHTML(extractDocumentArtifacts(response));
+      resultArtifacts.style.display = html ? 'block' : 'none';
+      resultArtifacts.innerHTML = html;
+    }
     if (playgroundHistoryVisible) loadPlaygroundHistory();
   } catch (e) {
     resultDiv && (resultDiv.style.display = 'block');
     if (resultContent) {
       resultContent.textContent = 'Error: ' + (e.message || e);
+    }
+    if (resultArtifacts) {
+      resultArtifacts.style.display = 'none';
+      resultArtifacts.innerHTML = '';
     }
   } finally {
     sendBtn.disabled = false;
@@ -2198,6 +2944,38 @@ function togglePlaygroundHistory() {
   if (container) container.classList.toggle('with-history', playgroundHistoryVisible);
   if (btn) btn.classList.toggle('active', playgroundHistoryVisible);
   if (playgroundHistoryVisible) loadPlaygroundHistory();
+  setQueryParam('pgHistory', playgroundHistoryVisible ? '1' : '');
+}
+
+function getHiddenConversations() {
+  try {
+    const raw = localStorage.getItem(HIDDEN_CONVERSATIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function saveHiddenConversations(set) {
+  localStorage.setItem(HIDDEN_CONVERSATIONS_KEY, JSON.stringify(Array.from(set)));
+}
+
+function hideConversationHistory(id) {
+  const hidden = getHiddenConversations();
+  hidden.add(id);
+  saveHiddenConversations(hidden);
+}
+
+function deleteConversationFromHistory(kind, id) {
+  if (!id) return;
+  const label = kind === 'session' ? 'this conversation thread' : 'this conversation';
+  if (!confirm(`Delete ${label} from history?`)) return;
+  hideConversationHistory(`${kind}:${id}`);
+  if ((kind === 'session' && playgroundSessionId === id) || (kind === 'run' && !playgroundSessionId)) {
+    startNewConversation();
+  }
+  loadPlaygroundHistory();
 }
 
 async function loadPlaygroundHistory() {
@@ -2205,17 +2983,22 @@ async function loadPlaygroundHistory() {
   if (!list) return;
   list.innerHTML = '<div class="history-empty">Loading...</div>';
   try {
-    const runs = await api.get('/api/v1/runs?limit=50&offset=0');
+    const runs = await api.get('/api/v1/runs?limit=100&offset=0');
     if (!Array.isArray(runs) || runs.length === 0) {
       list.innerHTML = '<div class="history-empty">No conversations yet</div>';
       _playgroundHistoryRuns = [];
       return;
     }
+    const hidden = getHiddenConversations();
+
     // Group runs by session_id. Runs without session go individually.
     const sessions = new Map();
     const standalone = [];
     for (const run of runs) {
       const sid = run.sessionId || '';
+      const runID = run.runId || '';
+      if (sid && hidden.has(`session:${sid}`)) continue;
+      if (!sid && runID && hidden.has(`run:${runID}`)) continue;
       if (sid) {
         if (!sessions.has(sid)) sessions.set(sid, []);
         sessions.get(sid).push(run);
@@ -2229,8 +3012,10 @@ async function loadPlaygroundHistory() {
 
     // Render session groups
     for (const [sid, sessionRuns] of sessions) {
-      const latest = sessionRuns[0];
-      const count = sessionRuns.length;
+      const latestVisible = sessionRuns.find((r) => !isAutoContinueInput(r.input || '')) || sessionRuns[0];
+      const latest = latestVisible;
+      const userTurns = sessionRuns.filter((r) => !isAutoContinueInput(r.input || '')).length;
+      const count = Math.max(userTurns, 1);
       const preview = latest.input || latest.output || '(no content)';
       const time = formatRelativeTime(latest.createdAt);
       const status = latest.status || 'completed';
@@ -2244,8 +3029,15 @@ async function loadPlaygroundHistory() {
           <span>${count} message${count !== 1 ? 's' : ''}</span>
           <span>•</span>
           <span>${time}</span>
+          <span style="margin-left:auto;"></span>
+          <button class="btn btn-ghost btn-sm" title="Delete conversation" data-history-delete>Delete</button>
         </div>
       `;
+      item.querySelector('[data-history-delete]')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        deleteConversationFromHistory('session', sid);
+      });
       list.appendChild(item);
     }
 
@@ -2264,8 +3056,15 @@ async function loadPlaygroundHistory() {
           <span>1 message</span>
           <span>•</span>
           <span>${time}</span>
+          <span style="margin-left:auto;"></span>
+          <button class="btn btn-ghost btn-sm" title="Delete conversation" data-history-delete>Delete</button>
         </div>
       `;
+      item.querySelector('[data-history-delete]')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        deleteConversationFromHistory('run', run.runId || '');
+      });
       list.appendChild(item);
     }
   } catch (e) {
@@ -2280,6 +3079,7 @@ async function restoreSession(sessionId, sessionRuns) {
 
   // Set session ID for continuity
   playgroundSessionId = sessionId;
+  playgroundConversation = [];
 
   // Clear chat and show messages from this session
   const messages = document.getElementById('chatMessages');
@@ -2289,13 +3089,14 @@ async function restoreSession(sessionId, sessionRuns) {
   // Load full run details for each run in the session (most recent first, reverse for chronological)
   const orderedRuns = [...sessionRuns].reverse();
   for (const run of orderedRuns) {
-    if (run.input) appendChatMessage('user', run.input);
+    const synthetic = isAutoContinueInput(run.input || '');
+    if (run.input && !synthetic) appendChatMessage('user', run.input);
     if (run.output) {
       const meta = [
         run.provider ? `provider=${run.provider}` : '',
         run.runId ? `run=${run.runId}` : '',
       ].filter(Boolean).join(' • ');
-      appendChatMessage('assistant', run.output, meta);
+      appendChatMessage('assistant', run.output, meta, artifactActionsHTML(extractDocumentArtifacts(run.output)));
     }
   }
 
@@ -2309,6 +3110,7 @@ function restoreSingleRun(run) {
   event?.target?.closest?.('.history-item')?.classList.add('active');
 
   playgroundSessionId = '';
+  playgroundConversation = [];
   const messages = document.getElementById('chatMessages');
   if (!messages) return;
   messages.innerHTML = '';
@@ -2319,7 +3121,7 @@ function restoreSingleRun(run) {
       run.provider ? `provider=${run.provider}` : '',
       run.runId ? `run=${run.runId}` : '',
     ].filter(Boolean).join(' • ');
-    appendChatMessage('assistant', run.output, meta);
+    appendChatMessage('assistant', run.output, meta, artifactActionsHTML(extractDocumentArtifacts(run.output)));
   }
   if (currentInputMode !== 'chat') setInputMode('chat');
   document.getElementById('chatInput')?.focus();
@@ -2327,6 +3129,7 @@ function restoreSingleRun(run) {
 
 function startNewConversation() {
   playgroundSessionId = '';
+  playgroundConversation = [];
   const messages = document.getElementById('chatMessages');
   if (messages) {
     messages.innerHTML = '<div class="chat-welcome"><p>Send a message to begin a new conversation.</p></div>';
@@ -2341,6 +3144,11 @@ function truncate(str, len) {
   return str.length > len ? str.substring(0, len) + '…' : str;
 }
 
+function isAutoContinueInput(text) {
+  const v = String(text || '').trim().toLowerCase();
+  return v.startsWith('continue with the next step immediately. do not ask for confirmation.');
+}
+
 function formatRelativeTime(dateStr) {
   if (!dateStr) return '';
   const now = Date.now();
@@ -2353,6 +3161,168 @@ function formatRelativeTime(dateStr) {
   return new Date(dateStr).toLocaleDateString();
 }
 
+// ===== Prompts =====
+let promptsCache = [];
+let selectedPromptRef = '';
+
+async function loadPrompts() {
+  const list = document.getElementById('promptsList');
+  if (!list) return;
+  list.innerHTML = '<div class="empty-state"><p>Loading prompts...</p></div>';
+  try {
+    const data = await api.get('/api/v1/prompts');
+    promptsCache = Array.isArray(data?.prompts) ? data.prompts : [];
+    renderPromptsList();
+    await loadPromptsCatalog();
+    const refFromQuery = queryParam('prompt') || '';
+    if (refFromQuery) {
+      selectPrompt(refFromQuery);
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="empty-state"><p>Failed to load prompts: ${escapeHtml(e.message || String(e))}</p></div>`;
+  }
+}
+
+function renderPromptsList() {
+  const list = document.getElementById('promptsList');
+  if (!list) return;
+  if (!promptsCache.length) {
+    list.innerHTML = '<div class="empty-state"><p>No prompts found</p></div>';
+    return;
+  }
+  list.innerHTML = promptsCache.map((p) => {
+    const ref = p.ref || `${p.name}@${p.version || 'v1'}`;
+    return `
+      <div class="action-item ${selectedPromptRef === ref ? 'selected' : ''}" data-prompt-ref="${escapeHtml(ref)}">
+        <div class="action-item-info">
+          <div class="action-item-name">${escapeHtml(ref)}</div>
+          <div class="action-item-desc">${escapeHtml(p.description || '')}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  list.querySelectorAll('[data-prompt-ref]').forEach((el) => {
+    el.addEventListener('click', () => {
+      selectPrompt(el.getAttribute('data-prompt-ref') || '');
+    });
+  });
+}
+
+async function selectPrompt(ref) {
+  if (!ref) return;
+  try {
+    const spec = await api.get(`/api/v1/prompts/${encodeURIComponent(ref)}`);
+    selectedPromptRef = `${spec.name}@${spec.version || 'v1'}`;
+    setQueryParam('prompt', selectedPromptRef);
+    document.getElementById('promptNameInput').value = spec.name || '';
+    document.getElementById('promptVersionInput').value = spec.version || 'v1';
+    document.getElementById('promptDescriptionInput').value = spec.description || '';
+    document.getElementById('promptSystemInput').value = spec.system || '';
+    renderPromptsList();
+  } catch (e) {
+    alert('Failed to load prompt: ' + (e.message || e));
+  }
+}
+
+function newPrompt() {
+  selectedPromptRef = '';
+  setQueryParam('prompt', '');
+  document.getElementById('promptNameInput').value = '';
+  document.getElementById('promptVersionInput').value = 'v1';
+  document.getElementById('promptDescriptionInput').value = '';
+  document.getElementById('promptSystemInput').value = '';
+  document.getElementById('promptVarsInput').value = '';
+  document.getElementById('promptRenderOutput').textContent = 'Select a prompt to inspect or render.';
+  renderPromptsList();
+}
+
+function promptSpecFromForm() {
+  return {
+    name: document.getElementById('promptNameInput')?.value?.trim() || '',
+    version: document.getElementById('promptVersionInput')?.value?.trim() || 'v1',
+    description: document.getElementById('promptDescriptionInput')?.value?.trim() || '',
+    system: document.getElementById('promptSystemInput')?.value?.trim() || '',
+  };
+}
+
+function promptVarsFromForm() {
+  const raw = document.getElementById('promptVarsInput')?.value?.trim() || '';
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch (_) {
+    return null;
+  }
+}
+
+async function validatePromptSpec() {
+  try {
+    const resp = await api.request('/api/v1/prompts/validate', {
+      method: 'POST',
+      body: JSON.stringify({ spec: promptSpecFromForm() }),
+    });
+    document.getElementById('promptRenderOutput').textContent = JSON.stringify(resp, null, 2);
+  } catch (e) {
+    document.getElementById('promptRenderOutput').textContent = 'Validation error: ' + (e.message || e);
+  }
+}
+
+async function renderPromptTemplate() {
+  const ref = selectedPromptRef || `${promptSpecFromForm().name}@${promptSpecFromForm().version || 'v1'}`;
+  const vars = promptVarsFromForm();
+  if (vars === null) {
+    alert('Prompt variables must be valid JSON object');
+    return;
+  }
+  try {
+    const resp = await api.request('/api/v1/prompts/render', {
+      method: 'POST',
+      body: JSON.stringify({ ref, input: vars }),
+    });
+    document.getElementById('promptRenderOutput').textContent = resp.rendered || '';
+  } catch (e) {
+    document.getElementById('promptRenderOutput').textContent = 'Render error: ' + (e.message || e);
+  }
+}
+
+async function savePromptSpec() {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
+  try {
+    const resp = await api.request('/api/v1/prompts', {
+      method: 'POST',
+      body: JSON.stringify({ spec: promptSpecFromForm() }),
+    });
+    const spec = resp?.spec || {};
+    selectedPromptRef = `${spec.name}@${spec.version || 'v1'}`;
+    setQueryParam('prompt', selectedPromptRef);
+    await loadPrompts();
+    alert(`Saved ${selectedPromptRef}`);
+  } catch (e) {
+    alert('Save failed: ' + (e.message || e));
+  }
+}
+
+async function deletePromptSpec() {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
+  const ref = selectedPromptRef || `${promptSpecFromForm().name}@${promptSpecFromForm().version || 'v1'}`;
+  if (!ref || ref === '@') return;
+  if (!confirm(`Delete prompt ${ref}?`)) return;
+  try {
+    await api.request(`/api/v1/prompts/${encodeURIComponent(ref)}`, { method: 'DELETE' });
+    newPrompt();
+    await loadPrompts();
+  } catch (e) {
+    alert('Delete failed: ' + (e.message || e));
+  }
+}
+
 // ===== Scheduler =====
 async function loadCronJobs() {
   const list = document.getElementById('cronJobList');
@@ -2363,6 +3333,7 @@ async function loadCronJobs() {
       list.innerHTML = '<div class="empty-state"><p>No scheduled jobs yet</p></div>';
       return;
     }
+    const canMutateCron = canRole('operator');
     list.innerHTML = jobs.map(j => `
       <div class="cron-job-row" style="display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid var(--border-color);">
         <div style="flex:1;">
@@ -2378,9 +3349,9 @@ async function loadCronJobs() {
           ${j.lastError ? `<div style="color:var(--accent-danger);">${escapeHtml(j.lastError)}</div>` : ''}
         </div>
         <div style="display:flex;gap:4px;margin-left:12px;">
-          <button class="btn btn-secondary btn-sm" onclick="triggerCronJob('${escapeHtml(j.name)}')" title="Trigger now">▶</button>
-          <button class="btn btn-secondary btn-sm" onclick="toggleCronJobEnabled('${escapeHtml(j.name)}', ${!j.enabled})" title="${j.enabled ? 'Pause' : 'Resume'}">${j.enabled ? '⏸' : '▶'}</button>
-          <button class="btn btn-secondary btn-sm" onclick="deleteCronJob('${escapeHtml(j.name)}')" title="Delete" style="color:var(--accent-danger);">✕</button>
+          ${canMutateCron ? `<button class="btn btn-secondary btn-sm" onclick="triggerCronJob('${escapeHtml(j.name)}')" title="Trigger now">▶</button>` : ''}
+          ${canMutateCron ? `<button class="btn btn-secondary btn-sm" onclick="toggleCronJobEnabled('${escapeHtml(j.name)}', ${!j.enabled})" title="${j.enabled ? 'Pause' : 'Resume'}">${j.enabled ? '⏸' : '▶'}</button>` : ''}
+          ${canMutateCron ? `<button class="btn btn-secondary btn-sm" onclick="deleteCronJob('${escapeHtml(j.name)}')" title="Delete" style="color:var(--accent-danger);">✕</button>` : ''}
         </div>
       </div>
     `).join('');
@@ -2390,11 +3361,16 @@ async function loadCronJobs() {
 }
 
 function toggleCronForm() {
+  if (!canRole('operator')) return;
   const form = document.getElementById('cronJobForm');
   if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 
 async function createCronJob() {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
   const name = document.getElementById('cronJobName')?.value?.trim();
   const cronExpr = document.getElementById('cronJobExpr')?.value?.trim();
   const input = document.getElementById('cronJobInput')?.value?.trim();
@@ -2422,6 +3398,10 @@ async function createCronJob() {
 }
 
 async function triggerCronJob(name) {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
   try {
     const resp = await api.post(`/api/v1/cron/jobs/${encodeURIComponent(name)}/trigger`, {});
     alert(`Job triggered. Status: ${resp?.status || 'unknown'}\nOutput: ${(resp?.output || '').substring(0, 200)}`);
@@ -2432,6 +3412,10 @@ async function triggerCronJob(name) {
 }
 
 async function toggleCronJobEnabled(name, enabled) {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
   try {
     await api.request(`/api/v1/cron/jobs/${encodeURIComponent(name)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
     loadCronJobs();
@@ -2441,6 +3425,10 @@ async function toggleCronJobEnabled(name, enabled) {
 }
 
 async function deleteCronJob(name) {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
   if (!confirm(`Delete scheduled job "${name}"?`)) return;
   try {
     await api.request(`/api/v1/cron/jobs/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -2463,10 +3451,20 @@ function initButtons() {
   document.getElementById('refreshRuns')?.addEventListener('click', loadRuns);
   document.getElementById('refreshTools')?.addEventListener('click', loadTools);
   document.getElementById('refreshWorkflows')?.addEventListener('click', loadWorkflows);
+  document.getElementById('toggleWorkflowCreate')?.addEventListener('click', () => toggleWorkflowCreateForm());
+  document.getElementById('cancelWorkflowCreate')?.addEventListener('click', () => toggleWorkflowCreateForm(false));
+  document.getElementById('createWorkflowBtn')?.addEventListener('click', createWorkflowFromUI);
   document.getElementById('refreshKeys')?.addEventListener('click', loadAuthKeys);
   document.getElementById('refreshRuntime')?.addEventListener('click', loadRuntime);
   document.getElementById('refreshQueueEvents')?.addEventListener('click', loadQueueEvents);
   document.getElementById('refreshAudit')?.addEventListener('click', loadAuditLogs);
+  document.getElementById('refreshPrompts')?.addEventListener('click', loadPrompts);
+  document.getElementById('newPromptBtn')?.addEventListener('click', newPrompt);
+  document.getElementById('validatePromptBtn')?.addEventListener('click', validatePromptSpec);
+  document.getElementById('renderPromptBtn')?.addEventListener('click', renderPromptTemplate);
+  document.getElementById('savePromptBtn')?.addEventListener('click', savePromptSpec);
+  document.getElementById('deletePromptBtn')?.addEventListener('click', deletePromptSpec);
+  document.getElementById('openCronAction')?.addEventListener('click', openCronActionPreset);
   document.getElementById('refreshTopology')?.addEventListener('click', loadWorkflowTopology);
   document.getElementById('zoomIn')?.addEventListener('click', () => zoomTopology(0.2));
   document.getElementById('zoomOut')?.addEventListener('click', () => zoomTopology(-0.2));
@@ -2596,9 +3594,27 @@ let actionsTypeFilter = 'all';
 
 async function loadActions() {
   try {
+    const qType = (queryParam('actionType') || 'all').toLowerCase();
+    const validTypes = new Set(['all', 'builtin', 'runtime', 'flow']);
+    actionsTypeFilter = validTypes.has(qType) ? qType : 'all';
+
+    const qSearch = queryParam('actionSearch') || '';
+    const searchInput = document.getElementById('actionsSearch');
+    if (searchInput && searchInput.value !== qSearch) {
+      searchInput.value = qSearch;
+    }
+    document.querySelectorAll('#actionsTypeFilter .toggle-btn').forEach((b) => {
+      b.classList.toggle('active', b.getAttribute('data-type') === actionsTypeFilter);
+    });
+
     const resp = await api.get('/api/v1/reflect');
     actionsCache = Array.isArray(resp?.actions) ? resp.actions : [];
     renderActionsList();
+    const actionFromQuery = queryParam('action');
+    if (!selectedAction && actionFromQuery) {
+      selectAction(actionFromQuery);
+    }
+    setTabScopedQuery('actions');
   } catch (e) {
     console.error('Failed to load actions:', e);
     document.getElementById('actionsList').innerHTML =
@@ -2635,11 +3651,16 @@ function renderActionsList() {
 }
 
 function filterActions() {
+  const search = (document.getElementById('actionsSearch')?.value || '').trim();
+  setQueryParam('actionSearch', search);
+  if (queryParam('tab') === 'actions') setTabScopedQuery('actions');
   renderActionsList();
 }
 
 function filterActionsByType(type) {
   actionsTypeFilter = type;
+  setQueryParam('actionType', type === 'all' ? '' : type);
+  if (queryParam('tab') === 'actions') setTabScopedQuery('actions');
   document.querySelectorAll('#actionsTypeFilter .toggle-btn').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-type') === type);
   });
@@ -2649,6 +3670,8 @@ function filterActionsByType(type) {
 function selectAction(key) {
   selectedAction = actionsCache.find(a => a.key === key);
   if (!selectedAction) return;
+  setQueryParam('action', key);
+  if (queryParam('tab') === 'actions') setTabScopedQuery('actions');
 
   renderActionsList(); // Update selection highlight
 
@@ -2805,6 +3828,10 @@ function collectFormInput() {
 
 async function runAction() {
   if (!selectedAction) return;
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
 
   const btn = document.getElementById('runActionBtn');
   btn.disabled = true;
@@ -2945,7 +3972,7 @@ async function viewSkillDetail(name) {
     if (sk.instructions) {
       html += `<details open><summary><strong>Instructions</strong></summary><pre class="skill-instructions">${escapeHtml(sk.instructions)}</pre></details>`;
     }
-    if (sk.source !== 'builtin') {
+    if (sk.source !== 'builtin' && canRole('operator')) {
       html += `<div style="margin-top:12px;"><button class="btn btn-danger" onclick="removeSkill('${name}')">Remove Skill</button></div>`;
     }
     document.getElementById('skillDetailBody').innerHTML = html;
@@ -2955,6 +3982,10 @@ async function viewSkillDetail(name) {
 }
 
 async function removeSkill(name) {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
   if (!confirm(`Remove skill "${name}"?`)) return;
   try {
     await api.request(`/api/v1/skills/${name}`, { method: 'DELETE' });
@@ -2966,11 +3997,16 @@ async function removeSkill(name) {
 }
 
 function toggleSkillInstallForm() {
+  if (!canRole('operator')) return;
   const form = document.getElementById('skillInstallForm');
   form.style.display = form.style.display === 'none' ? '' : 'none';
 }
 
 async function installSkillFromGitHub() {
+  if (!canRole('operator')) {
+    alert('Operator role required');
+    return;
+  }
   const repoUrl = document.getElementById('skillRepoUrl').value.trim();
   if (!repoUrl) { alert('Repository URL is required'); return; }
   try {
@@ -2992,6 +4028,10 @@ async function installSkillFromGitHub() {
   initCommandBar();
   initPlayground();
   initButtons();
+  await loadPrincipal();
+  if (queryParam('pgHistory') === '1' && !playgroundHistoryVisible) {
+    togglePlaygroundHistory();
+  }
 
   // Load all data
   await Promise.all([
@@ -3000,6 +4040,7 @@ async function installSkillFromGitHub() {
     loadRuns(),
     loadTools(),
     loadWorkflows(),
+    loadPrompts(),
     loadRuntime(),
     loadAuthKeys(),
     loadAuditLogs(),

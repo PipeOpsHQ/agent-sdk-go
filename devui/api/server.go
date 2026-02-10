@@ -17,13 +17,12 @@ import (
 
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 	observestore "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store"
 	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/state"
 	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
-	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
 )
 
 //go:embed static/*
@@ -42,6 +41,9 @@ type Config struct {
 	RequireAPIKey    bool
 	AllowLocalNoAuth bool
 	DefaultFlow      string
+	WorkflowSpecDir  string
+	ProviderEnvFile  string
+	PromptSpecDir    string
 }
 
 type Server struct {
@@ -62,6 +64,15 @@ type principal struct {
 func NewServer(cfg Config) *Server {
 	if strings.TrimSpace(cfg.Addr) == "" {
 		cfg.Addr = "127.0.0.1:7070"
+	}
+	if strings.TrimSpace(cfg.WorkflowSpecDir) == "" {
+		cfg.WorkflowSpecDir = "./.ai-agent/workflows"
+	}
+	if strings.TrimSpace(cfg.ProviderEnvFile) == "" {
+		cfg.ProviderEnvFile = "./.ai-agent/provider_env.json"
+	}
+	if strings.TrimSpace(cfg.PromptSpecDir) == "" {
+		cfg.PromptSpecDir = "./.ai-agent/prompts"
 	}
 	s := &Server{
 		cfg:             cfg,
@@ -164,15 +175,24 @@ func (s *Server) registerRoutes() {
 
 	s.mux.HandleFunc("/api/v1/auth/keys", s.require(auth.RoleAdmin, s.handleAuthKeys))
 	s.mux.HandleFunc("/api/v1/auth/keys/", s.require(auth.RoleAdmin, s.handleAuthKeyByID))
+	s.mux.HandleFunc("/api/v1/auth/me", s.require(auth.RoleViewer, s.handleAuthMe))
 	s.mux.HandleFunc("/api/v1/audit/logs", s.require(auth.RoleViewer, s.handleAuditLogs))
 	s.mux.HandleFunc("/api/v1/cron/jobs", s.require(auth.RoleViewer, s.handleCronJobs))
-	s.mux.HandleFunc("/api/v1/cron/jobs/", s.require(auth.RoleOperator, s.handleCronJobByName))
+	s.mux.HandleFunc("/api/v1/cron/jobs/", s.require(auth.RoleViewer, s.handleCronJobByName))
 	s.mux.HandleFunc("/api/v1/skills", s.require(auth.RoleViewer, s.handleSkills))
 	s.mux.HandleFunc("/api/v1/skills/", s.require(auth.RoleViewer, s.handleSkillByName))
 	s.mux.HandleFunc("/api/v1/guardrails", s.require(auth.RoleViewer, s.handleGuardrails))
 	s.mux.HandleFunc("/api/v1/flows", s.require(auth.RoleViewer, s.handleFlows))
+	s.mux.HandleFunc("/api/v1/prompts", s.require(auth.RoleViewer, s.handlePrompts))
+	s.mux.HandleFunc("/api/v1/prompts/", s.require(auth.RoleViewer, s.handlePromptByRef))
+	s.mux.HandleFunc("/api/v1/prompts/render", s.require(auth.RoleViewer, s.handlePromptRender))
+	s.mux.HandleFunc("/api/v1/prompts/validate", s.require(auth.RoleViewer, s.handlePromptValidate))
+	s.mux.HandleFunc("/api/v1/files/view", s.require(auth.RoleViewer, s.handleFileView))
+	s.mux.HandleFunc("/api/v1/files/download", s.require(auth.RoleViewer, s.handleFileDownload))
 	s.mux.HandleFunc("/api/v1/reflect", s.require(auth.RoleViewer, s.handleReflect))
 	s.mux.HandleFunc("/api/v1/actions/run", s.require(auth.RoleOperator, s.handleRunAction))
+	s.mux.HandleFunc("/api/v1/settings/provider-env", s.require(auth.RoleViewer, s.handleProviderEnvSettings))
+	s.mux.HandleFunc("/api/v1/settings/provider-models", s.require(auth.RoleOperator, s.handleProviderModelSettings))
 	s.mux.HandleFunc("/api/v1/config", s.handleConfig)
 
 	staticRoot, _ := fs.Sub(staticFiles, "static")
@@ -802,6 +822,11 @@ func (s *Server) handlePlaygroundStream(w http.ResponseWriter, r *http.Request, 
 				if strings.TrimSpace(resp.Status) == "" {
 					resp.Status = "completed"
 				}
+				if out := strings.TrimSpace(resp.Output); out != "" {
+					for _, chunk := range splitOutputChunks(out, 180) {
+						sendSSE("delta", map[string]any{"text": chunk})
+					}
+				}
 				sendSSE("complete", resp)
 			}
 			return
@@ -809,6 +834,25 @@ func (s *Server) handlePlaygroundStream(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
+}
+
+func splitOutputChunks(s string, n int) []string {
+	if n <= 0 {
+		n = 180
+	}
+	runes := []rune(s)
+	if len(runes) <= n {
+		return []string{s}
+	}
+	out := make([]string, 0, (len(runes)/n)+1)
+	for i := 0; i < len(runes); i += n {
+		end := i + n
+		if end > len(runes) {
+			end = len(runes)
+		}
+		out = append(out, string(runes[i:end]))
+	}
+	return out
 }
 
 func (s *Server) handleToolTemplates(w http.ResponseWriter, r *http.Request, p principal) {
@@ -1006,41 +1050,6 @@ func (s *Server) handleToolCatalog(w http.ResponseWriter, r *http.Request, _ pri
 	})
 }
 
-func (s *Server) handleWorkflows(w http.ResponseWriter, r *http.Request, _ principal) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
-		return
-	}
-	if s.cfg.CatalogStore == nil {
-		writeJSON(w, http.StatusOK, []catalog.WorkflowToolBinding{})
-		return
-	}
-	items, err := s.cfg.CatalogStore.ListWorkflowBindings(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (s *Server) handleWorkflowRegistry(w http.ResponseWriter, r *http.Request, _ principal) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
-		return
-	}
-	names := workflow.Names()
-	items := make([]map[string]any, 0, len(names))
-	for _, name := range names {
-		items = append(items, map[string]any{
-			"name": name,
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"workflows": items,
-		"count":     len(items),
-	})
-}
-
 func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request, _ principal) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
@@ -1061,65 +1070,6 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"defaultFlow": s.cfg.DefaultFlow,
 	})
-}
-
-func (s *Server) handleWorkflowBindingByID(w http.ResponseWriter, r *http.Request, p principal) {
-	if s.cfg.CatalogStore == nil {
-		writeError(w, http.StatusNotImplemented, fmt.Errorf("catalog store not configured"))
-		return
-	}
-	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/workflows/"))
-	if len(parts) != 2 {
-		writeError(w, http.StatusNotFound, fmt.Errorf("unsupported workflow endpoint"))
-		return
-	}
-	workflowName := parts[0]
-	if workflowName == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("workflow is required"))
-		return
-	}
-	if parts[1] == "topology" {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
-			return
-		}
-		topology := s.workflowTopology(r.Context(), workflowName)
-		writeJSON(w, http.StatusOK, topology)
-		return
-	}
-	if parts[1] != "tool-bindings" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("unsupported workflow endpoint"))
-		return
-	}
-	switch r.Method {
-	case http.MethodPatch:
-		if p.Role.Rank() < auth.RoleOperator.Rank() {
-			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
-			return
-		}
-		var input catalog.WorkflowToolBinding
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		input.Workflow = workflowName
-		saved, err := s.cfg.CatalogStore.SaveWorkflowBinding(r.Context(), input)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		s.audit(r.Context(), p, "catalog.binding.patch", "workflow_tool_bindings", saved)
-		writeJSON(w, http.StatusOK, saved)
-	case http.MethodGet:
-		binding, err := s.cfg.CatalogStore.GetWorkflowBinding(r.Context(), workflowName)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, binding)
-	default:
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
-	}
 }
 
 func (s *Server) handleIntegrationProviders(w http.ResponseWriter, r *http.Request, p principal) {
@@ -1227,6 +1177,17 @@ func (s *Server) handleAuthKeys(w http.ResponseWriter, r *http.Request, p princi
 	default:
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
 	}
+}
+
+func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request, p principal) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"keyId": p.KeyID,
+		"role":  p.Role,
+	})
 }
 
 func (s *Server) handleAuthKeyByID(w http.ResponseWriter, r *http.Request, p principal) {

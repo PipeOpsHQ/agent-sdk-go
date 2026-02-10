@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
 	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/framework/runtime/cron"
 )
 
@@ -21,6 +22,10 @@ func (s *Server) handleCronJobs(w http.ResponseWriter, r *http.Request, p princi
 		writeJSON(w, http.StatusOK, jobs)
 
 	case http.MethodPost:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient role: requires operator"})
+			return
+		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body: " + err.Error()})
@@ -76,6 +81,10 @@ func (s *Server) handleCronJobByName(w http.ResponseWriter, r *http.Request, p p
 		writeJSON(w, http.StatusOK, job)
 
 	case r.Method == http.MethodDelete:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient role: requires operator"})
+			return
+		}
 		if err := s.cfg.Scheduler.Remove(name); err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
@@ -84,6 +93,10 @@ func (s *Server) handleCronJobByName(w http.ResponseWriter, r *http.Request, p p
 		writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 
 	case r.Method == http.MethodPost && action == "trigger":
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient role: requires operator"})
+			return
+		}
 		job, ok := s.cfg.Scheduler.Get(name)
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
@@ -107,6 +120,10 @@ func (s *Server) handleCronJobByName(w http.ResponseWriter, r *http.Request, p p
 		writeJSON(w, http.StatusOK, resp)
 
 	case r.Method == http.MethodPatch:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient role: requires operator"})
+			return
+		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body: " + err.Error()})

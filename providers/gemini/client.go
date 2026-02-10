@@ -84,7 +84,13 @@ func (c *Client) Generate(ctx context.Context, req types.Request) (types.Respons
 		return types.Response{}, fmt.Errorf("gemini generation failed: %w", err)
 	}
 	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
-		return types.Response{}, fmt.Errorf("gemini returned no candidates")
+		fallback := "I could not produce a response from Gemini for this step. Please continue with the task using available tools and provide the best next result."
+		if resp.PromptFeedback != nil && strings.TrimSpace(resp.PromptFeedback.BlockReasonMessage) != "" {
+			fallback = "Gemini returned no candidates: " + strings.TrimSpace(resp.PromptFeedback.BlockReasonMessage)
+		}
+		return types.Response{
+			Message: types.Message{Role: types.RoleAssistant, Content: fallback},
+		}, nil
 	}
 
 	candidate := resp.Candidates[0].Content

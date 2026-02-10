@@ -78,7 +78,7 @@ Be constructive and specific with line references.`,
 - Infrastructure troubleshooting
 - CI/CD pipeline questions
 Be practical and provide ready-to-use commands.`,
-		InputExample:  "Show all pods in CrashLoopBackOff across all namespaces, then check the logs of the most recent crash",
+		InputExample: "Show all pods in CrashLoopBackOff across all namespaces, then check the logs of the most recent crash",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -179,13 +179,45 @@ Group by region, compute total revenue for shipped orders, and output as a markd
 	})
 
 	_ = Register(&Definition{
+		Name:        "cost-aware-assistant",
+		Description: "Two-pass response with compact summary memory for lower-context follow-ups.",
+		Workflow:    "summary-memory",
+		Tools:       []string{"@default"},
+		SystemPrompt: `You optimize for quality and token efficiency.
+- First produce a complete draft internally
+- Build a compact memory summary of durable facts and decisions
+- Return a refined final response for the user
+Keep answers actionable and concise unless detail is requested.`,
+		InputExample: "Summarize this outage thread, propose remediation, and keep reusable context for follow-up questions.",
+		InputSchema:  simpleTextSchema,
+		OutputSchema: simpleOutputSchema,
+	})
+
+	_ = Register(&Definition{
+		Name:        "support-engineer",
+		Description: "Customer support assistant with research and document tooling for guided troubleshooting.",
+		Workflow:    "summary-memory",
+		Tools:       []string{"@default", "@network", "@docs"},
+		Skills:      []string{"document-manager", "research-planner", "pdf-reporting"},
+		SystemPrompt: `You are a customer support engineer for PipeOps.
+- Be empathetic, direct, and solution-focused
+- Ask only essential clarifying questions
+- Prefer actionable steps and clear expected outcomes
+- Produce shareable summaries or PDF-ready reports when requested
+- Continue to the next troubleshooting step without unnecessary confirmation unless high-risk actions are involved`,
+		InputExample: "A customer says their webhook integration fails intermittently. Diagnose likely causes and give a step-by-step resolution plan.",
+		InputSchema:  simpleTextSchema,
+		OutputSchema: simpleOutputSchema,
+	})
+
+	_ = Register(&Definition{
 		Name:        "general-assistant",
 		Description: "General-purpose AI assistant with all tools available.",
 		Tools:       []string{"@all"},
 		SystemPrompt: `You are a versatile AI assistant with access to all available tools.
 Help the user with any task — writing, analysis, coding, research, calculations, etc.
 Choose the most appropriate tools for each task automatically.`,
-		InputExample:  "Scan my current directory for any .env files, list their contents (redact secrets), and check if any ports from the configs are currently in use",
+		InputExample: "Scan my current directory for any .env files, list their contents (redact secrets), and check if any ports from the configs are currently in use",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

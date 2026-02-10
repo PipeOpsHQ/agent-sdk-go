@@ -56,6 +56,13 @@
             </svg>
             <span>Actions</span>
           </button>
+          <button class="nav-item" data-tab="prompts" title="Prompts">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            <span>Prompts</span>
+          </button>
           <button class="nav-item" data-tab="workflows" title="Graphs">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="5" cy="12" r="2"/>
@@ -130,6 +137,7 @@
           <div class="command-prefix">⌘K</div>
           <input id="commandInput" class="command-input" placeholder='Ask control plane: "resume failed runs from last checkpoint"' />
           <button id="commandRun" class="command-run">Execute</button>
+          <span id="rbacRoleBadge" class="badge" style="margin-left:8px;">role: unknown</span>
         </div>
         <div class="command-result" id="commandResult"></div>
 
@@ -305,11 +313,11 @@
                         </div>
                         <div class="run-interventions">
                           <div class="intervention-actions">
-                            <button class="btn btn-secondary btn-sm" data-intervention="cancel">Cancel</button>
-                            <button class="btn btn-secondary btn-sm" data-intervention="force_retry">Force Retry</button>
-                            <button class="btn btn-secondary btn-sm" data-intervention="skip_node">Skip Node</button>
-                            <button class="btn btn-secondary btn-sm" data-intervention="override_router">Override Route</button>
-                            <button class="btn btn-secondary btn-sm" data-intervention="inject_tool_result">Inject Tool Result</button>
+                            <button class="btn btn-secondary btn-sm" data-intervention="cancel" data-requires-role="operator">Cancel</button>
+                            <button class="btn btn-secondary btn-sm" data-intervention="force_retry" data-requires-role="operator">Force Retry</button>
+                            <button class="btn btn-secondary btn-sm" data-intervention="skip_node" data-requires-role="operator">Skip Node</button>
+                            <button class="btn btn-secondary btn-sm" data-intervention="override_router" data-requires-role="operator">Override Route</button>
+                            <button class="btn btn-secondary btn-sm" data-intervention="inject_tool_result" data-requires-role="operator">Inject Tool Result</button>
                           </div>
                           <div class="intervention-log" id="interventionLog">
                             <div class="empty-state"><p>No interventions recorded.</p></div>
@@ -358,10 +366,14 @@
           <!-- Flow Picker Bar -->
           <div class="playground-flow-bar">
             <div class="flow-picker">
-              <label>Agent Flow</label>
+              <label>Playbook</label>
               <select id="playgroundFlow" class="select">
-                <option value="">(none — configure manually)</option>
+                <option value="">(none - use quick setup below)</option>
               </select>
+              <div style="display:flex;gap:8px;margin-top:8px;">
+                <button type="button" class="btn btn-ghost btn-sm" id="supportModeBtn">Support Mode</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="resetModeBtn">Reset</button>
+              </div>
             </div>
             <div class="flow-info" id="playgroundFlowInfo" style="display:none;">
               <div class="flow-desc" id="playgroundFlowDesc"></div>
@@ -372,37 +384,55 @@
           <div class="playground-container">
             <div class="playground-config">
               <details class="config-details" id="playgroundConfigDetails">
-                <summary>Agent Configuration <span class="config-badge" id="configBadge">manual</span></summary>
+                <summary>Setup (optional) <span class="config-badge" id="configBadge">manual</span></summary>
                 <div class="config-group">
-                  <label>Workflow</label>
+                  <label>Execution Pattern</label>
                   <select id="playgroundWorkflow" class="select">
-                    <option value="basic">basic — single-agent pass</option>
-                    <option value="chain">chain — analyze → plan → execute → synthesize</option>
-                    <option value="router">router — classify → route to specialist</option>
-                    <option value="map-reduce">map-reduce — split → process → combine</option>
+                    <option value="basic">basic - one pass</option>
+                    <option value="chain">chain - think, plan, execute, summarize</option>
+                    <option value="router">router - pick specialist path</option>
+                    <option value="map-reduce">map-reduce - split, process, combine</option>
                   </select>
                 </div>
                 <div class="config-group">
-                  <label>Tools</label>
+                  <label>Tool Access</label>
                   <select id="playgroundTools" class="select" multiple size="6">
                   </select>
-                  <small style="color:var(--text-muted);font-size:11px;">Hold Ctrl/Cmd to select multiple</small>
+                  <small style="color:var(--text-muted);font-size:11px;">Tip: keep this minimal. Hold Ctrl/Cmd for multi-select.</small>
                 </div>
                 <div class="config-group">
-                  <label>Skills</label>
+                  <label>Skill Packs</label>
+                  <div style="display:flex;gap:6px;margin:-2px 0 8px;">
+                    <button type="button" class="btn btn-ghost btn-sm" id="selectAllSkills">Select all</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="clearAllSkills">Clear</button>
+                  </div>
                   <select id="playgroundSkills" class="select" multiple size="4">
                   </select>
-                  <small style="color:var(--text-muted);font-size:11px;">Skills inject instructions + tools into the agent</small>
+                  <small style="color:var(--text-muted);font-size:11px;">Adds domain behavior (research, docs, security, etc.).</small>
                 </div>
                 <div class="config-group">
-                  <label>Guardrails</label>
+                  <label>Safety Checks</label>
+                  <div style="display:flex;gap:6px;margin:-2px 0 8px;">
+                    <button type="button" class="btn btn-ghost btn-sm" id="selectAllGuardrails">Select all</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="clearAllGuardrails">Clear</button>
+                  </div>
                   <select id="playgroundGuardrails" class="select" multiple size="4">
                   </select>
-                  <small style="color:var(--text-muted);font-size:11px;">Guardrails validate input/output for safety and compliance</small>
+                  <small style="color:var(--text-muted);font-size:11px;">Optional validation for input/output safety.</small>
                 </div>
                 <div class="config-group">
-                  <label>System Prompt</label>
-                  <textarea id="playgroundSystemPrompt" class="textarea" rows="3" placeholder="Optional system prompt..."></textarea>
+                  <label>Prompt Template (optional)</label>
+                  <select id="playgroundPromptRef" class="select">
+                    <option value="">(none)</option>
+                  </select>
+                </div>
+                <div class="config-group">
+                  <label>Template Variables (JSON, optional)</label>
+                  <textarea id="playgroundPromptInput" class="textarea" rows="3" placeholder='{"service":"checkout","env":"prod"}'></textarea>
+                </div>
+                <div class="config-group">
+                  <label>Custom Instructions (advanced)</label>
+                  <textarea id="playgroundSystemPrompt" class="textarea" rows="3" placeholder="Leave empty unless you need to override defaults"></textarea>
                 </div>
               </details>
               <div class="config-group" style="margin-top:8px;">
@@ -455,6 +485,7 @@
               <div id="jsonResultOutput" class="json-result" style="display:none;">
                 <label>Output</label>
                 <pre id="jsonResultContent" class="json-output"></pre>
+                <div id="jsonResultArtifacts" class="chat-artifacts" style="display:none;"></div>
               </div>
             </div>
 
@@ -555,7 +586,7 @@
                     <div id="actionJsonEditor" style="display:none;">
                       <textarea id="actionJsonInput" class="textarea json-editor" rows="8" placeholder="{}"></textarea>
                     </div>
-                    <button class="btn btn-primary" onclick="runAction()" style="margin-top:12px;" id="runActionBtn">
+                    <button class="btn btn-primary" onclick="runAction()" style="margin-top:12px;" id="runActionBtn" data-requires-role="operator">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                         <polygon points="5,3 19,12 5,21"/>
                       </svg>
@@ -586,11 +617,74 @@
           </div>
         </section>
 
+        <!-- Prompts Tab -->
+        <section id="tab-prompts" class="tab">
+          <div class="page-header">
+            <h1>Prompts</h1>
+            <p class="page-subtitle">Genkit-style prompt resources: version, validate, render, and persist.</p>
+            <div class="header-actions">
+              <button class="btn btn-secondary" id="refreshPrompts">Refresh</button>
+              <button class="btn btn-primary" id="newPromptBtn" data-requires-role="operator">New Prompt</button>
+            </div>
+          </div>
+
+          <div class="actions-layout">
+            <div class="actions-list-panel card">
+              <div class="card-header"><h3>Prompt Registry</h3></div>
+              <div class="card-body" id="promptsList" style="max-height:640px;overflow:auto;">
+                <div class="empty-state"><p>Loading prompts...</p></div>
+              </div>
+            </div>
+
+            <div class="actions-detail-panel">
+              <div class="card" style="margin-bottom:16px;">
+                <div class="card-header"><h3>Prompt Editor</h3></div>
+                <div class="card-body">
+                  <div class="config-group">
+                    <label>Name</label>
+                    <input id="promptNameInput" class="input" placeholder="incident-triage" />
+                  </div>
+                  <div class="config-group">
+                    <label>Version</label>
+                    <input id="promptVersionInput" class="input" placeholder="v1" value="v1" />
+                  </div>
+                  <div class="config-group">
+                    <label>Description</label>
+                    <input id="promptDescriptionInput" class="input" placeholder="Describe behavior and constraints" />
+                  </div>
+                  <div class="config-group">
+                    <label>System Template</label>
+                    <textarea id="promptSystemInput" class="textarea json-editor" rows="10" placeholder="You are an assistant for {{service}} in {{env}}"></textarea>
+                  </div>
+                  <div class="config-group">
+                    <label>Render Variables (JSON)</label>
+                    <textarea id="promptVarsInput" class="textarea json-editor" rows="4" placeholder='{"service":"checkout","env":"prod"}'></textarea>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                    <button class="btn btn-secondary" id="validatePromptBtn">Validate</button>
+                    <button class="btn btn-secondary" id="renderPromptBtn">Render</button>
+                    <button class="btn btn-primary" id="savePromptBtn" data-requires-role="operator">Save</button>
+                    <button class="btn btn-danger" id="deletePromptBtn" data-requires-role="operator">Delete</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header"><h3>Render Output</h3></div>
+                <div class="card-body">
+                  <pre id="promptRenderOutput" class="json-output" style="max-height:360px;overflow:auto;">Select a prompt to inspect or render.</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Workflows Tab -->
         <section id="tab-workflows" class="tab">
           <div class="page-header">
             <h1>Workflows</h1>
             <div class="header-actions">
+              <button class="btn btn-primary" id="toggleWorkflowCreate" data-requires-role="operator">+ Create</button>
               <button class="btn btn-secondary" id="refreshWorkflows">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                   <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -598,6 +692,29 @@
                 </svg>
                 Refresh
               </button>
+            </div>
+          </div>
+
+          <div id="workflowCreateForm" class="card" style="display:none; margin-bottom:20px;">
+            <div class="card-header"><h3>Create Workflow</h3></div>
+            <div class="card-body" style="padding:16px;">
+              <div class="config-group">
+                <label>Workflow Name</label>
+                <input id="workflowCreateName" class="input" placeholder="incident-triage" />
+              </div>
+              <div class="config-group">
+                <label>Description (optional)</label>
+                <input id="workflowCreateDescription" class="input" placeholder="Route and triage incoming incidents" />
+              </div>
+              <div class="config-group">
+                <label>Workflow Spec (JSON)</label>
+                <textarea id="workflowCreateSpec" class="textarea json-editor" rows="14" placeholder='{"start":"prepare","nodes":[],"edges":[]}'></textarea>
+                <small style="color:var(--text-muted);font-size:11px;">Supported node kinds: noop, set, template, agent, output, router_json_key</small>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:12px;">
+                <button class="btn btn-primary" id="createWorkflowBtn" data-requires-role="operator">Create</button>
+                <button class="btn btn-secondary" id="cancelWorkflowCreate">Cancel</button>
+              </div>
             </div>
           </div>
 
@@ -823,7 +940,8 @@
             <p class="page-subtitle">Manage recurring agent tasks</p>
             <div class="header-actions">
               <button class="btn btn-secondary" id="refreshCronJobs" onclick="loadCronJobs()">Refresh</button>
-              <button class="btn btn-primary" id="showAddCronJob" onclick="toggleCronForm()">+ Add Job</button>
+              <button class="btn btn-secondary" id="openCronAction" data-requires-role="operator">Use Actions</button>
+              <button class="btn btn-primary" id="showAddCronJob" onclick="toggleCronForm()" data-requires-role="operator">+ Add Job</button>
             </div>
           </div>
 
@@ -855,7 +973,7 @@
                 <textarea id="cronJobSystemPrompt" class="textarea" rows="2" placeholder="Optional system prompt override..."></textarea>
               </div>
               <div style="display:flex;gap:8px;margin-top:12px;">
-                <button class="btn btn-primary" onclick="createCronJob()">Create</button>
+                <button class="btn btn-primary" onclick="createCronJob()" id="createCronJobBtn" data-requires-role="operator">Create</button>
                 <button class="btn btn-secondary" onclick="toggleCronForm()">Cancel</button>
               </div>
             </div>
@@ -876,7 +994,7 @@
             <p class="page-subtitle">Browse and manage agent skills (Agent Skills open standard)</p>
             <div class="header-actions">
               <button class="btn btn-secondary" onclick="loadSkills()">Refresh</button>
-              <button class="btn btn-primary" onclick="toggleSkillInstallForm()">+ Install from GitHub</button>
+              <button class="btn btn-primary" id="showInstallSkill" onclick="toggleSkillInstallForm()" data-requires-role="operator">+ Install from GitHub</button>
             </div>
           </div>
 
@@ -889,7 +1007,7 @@
                 <small style="color:var(--text-muted);font-size:11px;">Supports owner/repo format or full GitHub URLs</small>
               </div>
               <div style="display:flex;gap:8px;margin-top:12px;">
-                <button class="btn btn-primary" onclick="installSkillFromGitHub()">Install</button>
+                <button class="btn btn-primary" id="installSkillBtn" onclick="installSkillFromGitHub()" data-requires-role="operator">Install</button>
                 <button class="btn btn-secondary" onclick="toggleSkillInstallForm()">Cancel</button>
               </div>
             </div>
@@ -929,9 +1047,41 @@
                 </div>
                 <small class="help-text">Used for authenticating with the DevUI API</small>
               </div>
+
+              <div class="form-group" style="margin-top:16px;">
+                <label>LLM Provider</label>
+                <select id="providerSelect" class="select">
+                  <option value="gemini">gemini</option>
+                  <option value="openai">openai</option>
+                  <option value="anthropic">anthropic</option>
+                  <option value="azureopenai">azureopenai</option>
+                  <option value="ollama">ollama</option>
+                </select>
+                <small class="help-text">Sets <code>AGENT_PROVIDER</code> for playground runs</small>
+              </div>
+
+              <div class="form-group" style="margin-top:12px;">
+                <label>Provider API Key</label>
+                <div class="input-with-button">
+                  <input type="password" id="providerApiKeyInput" class="input" placeholder="Enter provider API key...">
+                  <button class="btn btn-secondary" id="saveProviderSettings" data-requires-role="operator">Save</button>
+                </div>
+                <small class="help-text" id="providerKeyHelp">Persisted in <code>.ai-agent/provider_env.json</code></small>
+              </div>
+
+              <div class="form-group" style="margin-top:12px;">
+                <label>Provider Model</label>
+                <div class="input-with-button">
+                  <select id="providerModelSelect" class="select">
+                    <option value="">(auto/default)</option>
+                  </select>
+                  <button class="btn btn-secondary" id="refreshProviderModels" data-requires-role="operator">Refresh</button>
+                </div>
+                <small class="help-text" id="providerModelHelp">Sets provider-specific model env (for example <code>GEMINI_MODEL</code>)</small>
+              </div>
             </div>
 
-            <div class="card">
+            <div class="card" id="authKeysCard" data-requires-role="admin">
               <div class="card-header">
                 <h3>Auth Keys</h3>
                 <button class="btn btn-secondary btn-sm" id="refreshKeys">Refresh</button>

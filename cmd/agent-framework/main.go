@@ -8,6 +8,5 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	cli.Run(ctx, os.Args[1:])
+	cli.Run(context.Background(), os.Args[1:])
 }

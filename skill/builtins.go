@@ -10,10 +10,10 @@ func RegisterBuiltins() {
 
 var builtinSkills = []*Skill{
 	{
-		Name:        "k8s-debug",
-		Description: "Debug Kubernetes pod failures, CrashLoopBackOff, OOMKilled, and networking issues. Use when the user asks to troubleshoot a Kubernetes cluster or application.",
+		Name:         "k8s-debug",
+		Description:  "Debug Kubernetes pod failures, CrashLoopBackOff, OOMKilled, and networking issues. Use when the user asks to troubleshoot a Kubernetes cluster or application.",
 		AllowedTools: []string{"kubectl", "shell_command"},
-		Source:      "builtin",
+		Source:       "builtin",
 		Instructions: `# Kubernetes Debugging
 
 ## Overview
@@ -55,10 +55,10 @@ Systematically debug Kubernetes application failures by inspecting pods, events,
 - Always show the user what commands you plan to run before executing`,
 	},
 	{
-		Name:        "incident-response",
-		Description: "Guide security incident response: triage, contain, investigate, and document. Use when the user reports a security incident or asks for incident response help.",
+		Name:         "incident-response",
+		Description:  "Guide security incident response: triage, contain, investigate, and document. Use when the user reports a security incident or asks for incident response help.",
 		AllowedTools: []string{"shell_command", "file_system", "@security", "@network"},
-		Source:      "builtin",
+		Source:       "builtin",
 		Instructions: `# Incident Response
 
 ## Overview
@@ -99,10 +99,10 @@ Follow a structured incident response process: Identify → Contain → Investig
 - Escalate immediately if PII or customer data is involved`,
 	},
 	{
-		Name:        "code-audit",
-		Description: "Perform security-focused code audits identifying OWASP Top 10 vulnerabilities, injection flaws, authentication issues, and insecure defaults. Use when the user asks for a security review or code audit.",
+		Name:         "code-audit",
+		Description:  "Perform security-focused code audits identifying OWASP Top 10 vulnerabilities, injection flaws, authentication issues, and insecure defaults. Use when the user asks for a security review or code audit.",
 		AllowedTools: []string{"code_search", "file_system", "git_repo", "@code"},
-		Source:      "builtin",
+		Source:       "builtin",
 		Instructions: `# Security Code Audit
 
 ## Overview
@@ -149,10 +149,10 @@ For each finding:
 - Do NOT modify code unless explicitly asked — this is an audit, not a fix`,
 	},
 	{
-		Name:        "secure-defaults",
-		Description: "Apply language and framework-specific security best practices and secure-by-default coding patterns. Use when writing new code or reviewing for security hygiene.",
+		Name:         "secure-defaults",
+		Description:  "Apply language and framework-specific security best practices and secure-by-default coding patterns. Use when writing new code or reviewing for security hygiene.",
 		AllowedTools: []string{"code_search", "file_system", "@code"},
-		Source:      "builtin",
+		Source:       "builtin",
 		Instructions: `# Secure Defaults
 
 ## Overview
@@ -216,5 +216,120 @@ Apply security best practices when writing or reviewing code. This skill ensures
 ## Boundaries
 - These are guidelines, not absolute rules — project context matters
 - If a best practice conflicts with project requirements, document why it was bypassed`,
+	},
+	{
+		Name:         "document-manager",
+		Description:  "Create, edit, organize, and maintain project documents (plans, reports, RFCs, runbooks, and notes). Use when users ask for document drafting or document updates.",
+		AllowedTools: []string{"document_generator", "pdf_generator", "google_docs_manager", "document_preview", "file_system", "text_processor", "json_parser", "diff_generator", "@docs", "@text", "@system"},
+		Source:       "builtin",
+		Instructions: `# Document Manager
+
+## Overview
+Create and maintain high-quality documents with clear structure, version-friendly updates, and actionable content.
+
+## Workflow
+
+1. **Clarify target artifact**
+   - Determine document type: RFC, runbook, incident report, implementation plan, meeting notes, changelog.
+   - Identify audience and required depth.
+
+2. **Draft with structure first**
+   - Start with a concise title and purpose.
+   - Use predictable sections (Summary, Context, Decision, Risks, Next Steps).
+   - Prefer short bullets over long prose where possible.
+
+3. **Write for maintainability**
+   - Keep each section focused on one concern.
+   - Include explicit assumptions and open questions.
+   - Add timestamps/owners for action items when relevant.
+
+4. **Update existing docs safely**
+   - Read current content before editing.
+   - Preserve useful context while improving clarity.
+   - Make minimal, reviewable edits; avoid unnecessary rewrites.
+
+5. **Final quality pass**
+   - Ensure consistent terminology.
+   - Remove ambiguity and duplicate statements.
+   - Confirm output is immediately usable by the intended reader.
+
+6. **Prepare chat delivery**
+   - Use document_preview for generated files.
+   - Return a concise preview plus view/download links.
+
+## Boundaries
+- Do NOT invent facts; mark unknowns explicitly.
+- Do NOT delete important historical context without reason.
+- Keep sensitive data out of shared documentation unless explicitly required.`,
+	},
+	{
+		Name:         "research-planner",
+		Description:  "Plan research tasks and synthesize findings into decision-ready briefs with sources, assumptions, and next actions.",
+		AllowedTools: []string{"web_search", "web_scraper", "http_client", "file_system", "text_processor", "json_parser", "todo_manager", "@network", "@text"},
+		Source:       "builtin",
+		Instructions: `# Research Planner
+
+## Overview
+Run research in a disciplined loop: question framing -> evidence collection -> synthesis -> decision support.
+
+## Workflow
+
+1. **Frame the research question**
+   - Define scope, constraints, and success criteria.
+   - Break broad topics into 3-6 focused sub-questions.
+
+2. **Collect evidence systematically**
+   - Gather multiple sources, prioritize primary/authoritative data.
+   - Record source links and key claims.
+   - Track uncertain or conflicting points explicitly.
+
+3. **Synthesize into a brief**
+   - Distinguish facts vs interpretation.
+   - Summarize alternatives with tradeoffs.
+   - Highlight confidence level and evidence gaps.
+
+4. **Produce an action plan**
+   - Convert findings into clear recommendations.
+   - Provide short/medium-term next steps.
+   - Include verification checkpoints.
+
+## Output Pattern
+- **Question**
+- **Key Findings** (bullets)
+- **Evidence** (source + claim)
+- **Open Risks/Unknowns**
+- **Recommended Next Actions**
+
+## Boundaries
+- Avoid overconfident conclusions when evidence is thin.
+- Prefer transparent uncertainty over fabricated certainty.
+- Keep reports concise and decision-focused.`,
+	},
+	{
+		Name:         "pdf-reporting",
+		Description:  "Create executive-ready reports and export them to PDF for sharing.",
+		AllowedTools: []string{"document_generator", "pdf_generator", "google_docs_manager", "document_preview", "file_system", "text_processor", "json_parser", "@docs", "@text"},
+		Source:       "builtin",
+		Instructions: `# PDF Reporting
+
+## Overview
+Turn raw findings into concise documents and export polished PDF deliverables.
+
+## Workflow
+
+1. Draft structure with document_generator (report or plan template).
+2. Fill key sections: summary, findings, recommendations, next actions.
+3. Keep sections scannable and decision-focused.
+4. Export to PDF using pdf_generator and provide output path.
+5. Use document_preview so chat can show a readable preview and links.
+
+## Quality Bar
+- Executive summary in first 5-8 lines.
+- Explicit risks/unknowns and owners for next actions.
+- No sensitive secrets in report body.
+
+## Boundaries
+- Do not fabricate findings.
+- Prefer concise, factual language over marketing tone.`,
 	},
 }

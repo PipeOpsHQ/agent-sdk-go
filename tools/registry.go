@@ -53,6 +53,27 @@ func MustRegisterTool(name, description string, factory Factory) {
 	}
 }
 
+func UpsertTool(name, description string, factory Factory) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("tool name is required")
+	}
+	if factory == nil {
+		return fmt.Errorf("tool factory is required")
+	}
+	regMu.Lock()
+	defer regMu.Unlock()
+	toolFactories[name] = factory
+	toolDescs[name] = strings.TrimSpace(description)
+	return nil
+}
+
+func MustUpsertTool(name, description string, factory Factory) {
+	if err := UpsertTool(name, description, factory); err != nil {
+		panic(err)
+	}
+}
+
 func RegisterBundle(name, description string, toolNames []string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {

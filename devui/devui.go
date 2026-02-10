@@ -48,14 +48,14 @@ import (
 
 	agentfw "github.com/PipeOpsHQ/agent-sdk-go/framework/agent"
 	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/api"
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"     // registers "basic" workflow
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/chain"     // registers "chain" workflow
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/mapreduce" // registers "map-reduce" workflow
-	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/router"    // registers "router" workflow
 	authsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth/sqlite"
 	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/devui/catalog/sqlite"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/graph"
+	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/basic"     // registers "basic" workflow
+	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/chain"     // registers "chain" workflow
+	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/mapreduce" // registers "map-reduce" workflow
+	_ "github.com/PipeOpsHQ/agent-sdk-go/framework/graphs/router"    // registers "router" workflow
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/guardrail"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/observe"
 	observesqlite "github.com/PipeOpsHQ/agent-sdk-go/framework/observe/store/sqlite"
@@ -256,14 +256,14 @@ func Start(ctx context.Context, opts ...Options) error {
 	}()
 
 	// Register cron_manager tool
-	_ = tools.RegisterTool("cron_manager",
+	_ = tools.UpsertTool("cron_manager",
 		"Manage cron-scheduled agent jobs: list, add, remove, trigger, enable, disable recurring tasks.",
 		func() tools.Tool { return tools.NewCronManager(scheduler) },
 	)
 
 	// Register self_api tool — lets the agent call its own API
 	selfAPIBase := "http://" + o.Addr
-	_ = tools.RegisterTool("self_api",
+	_ = tools.UpsertTool("self_api",
 		"Call the agent's own DevUI API to manage cron jobs, skills, flows, runs, tools, workflows, runtime, and more.",
 		func() tools.Tool { return tools.NewSelfAPI(selfAPIBase) },
 	)
@@ -590,13 +590,13 @@ func buildRuntime(ctx context.Context, store state.Store, o Options) (*runtimeCo
 	}
 
 	return &runtimeComponents{
-		service:      service,
-		attemptStore: attemptStore,
-		queue:        queueStore,
-	}, func() {
-		_ = queueStore.Close()
-		_ = attemptStore.Close()
-	}
+			service:      service,
+			attemptStore: attemptStore,
+			queue:        queueStore,
+		}, func() {
+			_ = queueStore.Close()
+			_ = attemptStore.Close()
+		}
 }
 
 func parseBoolEnv(key string, fallback bool) bool {

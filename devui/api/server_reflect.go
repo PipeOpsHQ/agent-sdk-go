@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/flow"
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/prompt"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
 	fwtools "github.com/PipeOpsHQ/agent-sdk-go/framework/tools"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/workflow"
@@ -91,6 +92,20 @@ func (s *Server) handleReflect(w http.ResponseWriter, r *http.Request, _ princip
 			Type:        "skill",
 			Description: sk.Description,
 			Metadata:    meta,
+		}
+		actions = append(actions, a)
+	}
+
+	// Prompts
+	for _, spec := range prompt.List() {
+		a := Action{
+			Key:         "/prompt/" + spec.Name + "@" + spec.Version,
+			Name:        spec.Name + "@" + spec.Version,
+			Type:        "prompt",
+			Description: spec.Description,
+			Metadata: map[string]any{
+				"tags": spec.Tags,
+			},
 		}
 		actions = append(actions, a)
 	}
@@ -189,8 +204,46 @@ func (s *Server) handleRunAction(w http.ResponseWriter, r *http.Request, _ princ
 			"duration":  elapsed.Milliseconds(),
 		})
 
+	case "prompt":
+		elapsed := time.Since(start)
+		spec, ok := prompt.Resolve(actionName)
+		if !ok {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"key":      req.Key,
+				"status":   "error",
+				"error":    fmt.Sprintf("prompt %q not found", actionName),
+				"duration": elapsed.Milliseconds(),
+			})
+			return
+		}
+		vars := map[string]string{}
+		if req.Input != nil {
+			var inputObj map[string]any
+			if err := json.Unmarshal(req.Input, &inputObj); err == nil {
+				for k, v := range inputObj {
+					vars[k] = fmt.Sprintf("%v", v)
+				}
+			}
+		}
+		rendered, renderErr := prompt.Render(spec.System, vars)
+		if renderErr != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"key":      req.Key,
+				"status":   "error",
+				"error":    renderErr.Error(),
+				"duration": elapsed.Milliseconds(),
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"key":      req.Key,
+			"status":   "success",
+			"output":   rendered,
+			"duration": elapsed.Milliseconds(),
+		})
+
 	default:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported action type %q (supported: tool, flow)", actionType))
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported action type %q (supported: tool, flow, prompt)", actionType))
 	}
 }
 

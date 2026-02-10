@@ -6,15 +6,20 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/devui/auth"
 	"github.com/PipeOpsHQ/agent-sdk-go/framework/skill"
 )
 
 // handleSkills handles GET /api/v1/skills (list) and POST /api/v1/skills (install from GitHub).
-func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request, _ principal) {
+func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request, p principal) {
 	switch r.Method {
 	case http.MethodGet:
 		s.handleSkillsList(w, r)
 	case http.MethodPost:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		s.handleSkillsInstall(w, r)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
@@ -65,14 +70,14 @@ func (s *Server) handleSkillsInstall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":    "installed",
-		"count":     count,
-		"repoUrl":   req.RepoURL,
+		"status":  "installed",
+		"count":   count,
+		"repoUrl": req.RepoURL,
 	})
 }
 
 // handleSkillByName handles GET/DELETE /api/v1/skills/{name}
-func (s *Server) handleSkillByName(w http.ResponseWriter, r *http.Request, _ principal) {
+func (s *Server) handleSkillByName(w http.ResponseWriter, r *http.Request, p principal) {
 	name := strings.TrimPrefix(r.URL.Path, "/api/v1/skills/")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("skill name is required"))
@@ -96,6 +101,10 @@ func (s *Server) handleSkillByName(w http.ResponseWriter, r *http.Request, _ pri
 			"path":         sk.Path,
 		})
 	case http.MethodDelete:
+		if p.Role.Rank() < auth.RoleOperator.Rank() {
+			writeError(w, http.StatusForbidden, fmt.Errorf("insufficient role: requires %s", auth.RoleOperator))
+			return
+		}
 		if !skill.Remove(name) {
 			writeError(w, http.StatusNotFound, fmt.Errorf("skill %q not found", name))
 			return

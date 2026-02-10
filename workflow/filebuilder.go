@@ -51,6 +51,14 @@ type fileBuilder struct {
 	spec FileSpec
 }
 
+func NewFileBuilder(spec FileSpec) (Builder, error) {
+	normalized, err := normalizeFileSpec(spec, "inline workflow")
+	if err != nil {
+		return nil, err
+	}
+	return &fileBuilder{spec: normalized}, nil
+}
+
 func NewFileBuilderFromPath(path string) (Builder, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -68,17 +76,48 @@ func NewFileBuilderFromPath(path string) (Builder, error) {
 	if err := json.Unmarshal(content, &spec); err != nil {
 		return nil, fmt.Errorf("failed to decode workflow file %q as JSON: %w", abs, err)
 	}
-	if strings.TrimSpace(spec.Name) == "" {
-		base := filepath.Base(abs)
-		spec.Name = strings.TrimSuffix(base, filepath.Ext(base))
+	normalized, err := normalizeFileSpec(spec, abs)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(spec.Start) == "" {
-		return nil, fmt.Errorf("workflow file %q missing start node", abs)
+	if strings.TrimSpace(normalized.Name) == "" {
+		base := filepath.Base(abs)
+		normalized.Name = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	return &fileBuilder{spec: normalized}, nil
+}
+
+func normalizeFileSpec(spec FileSpec, source string) (FileSpec, error) {
+	spec.Name = strings.TrimSpace(spec.Name)
+	spec.Description = strings.TrimSpace(spec.Description)
+	spec.Start = strings.TrimSpace(spec.Start)
+	if spec.Start == "" {
+		return FileSpec{}, fmt.Errorf("workflow %q missing start node", strings.TrimSpace(source))
 	}
 	if len(spec.Nodes) == 0 {
-		return nil, fmt.Errorf("workflow file %q has no nodes", abs)
+		return FileSpec{}, fmt.Errorf("workflow %q has no nodes", strings.TrimSpace(source))
 	}
-	return &fileBuilder{spec: spec}, nil
+	for i := range spec.Nodes {
+		spec.Nodes[i].ID = strings.TrimSpace(spec.Nodes[i].ID)
+		spec.Nodes[i].Kind = strings.TrimSpace(spec.Nodes[i].Kind)
+		spec.Nodes[i].Key = strings.TrimSpace(spec.Nodes[i].Key)
+		spec.Nodes[i].Template = strings.TrimSpace(spec.Nodes[i].Template)
+		spec.Nodes[i].OutputKey = strings.TrimSpace(spec.Nodes[i].OutputKey)
+		spec.Nodes[i].InputFrom = strings.TrimSpace(spec.Nodes[i].InputFrom)
+		spec.Nodes[i].From = strings.TrimSpace(spec.Nodes[i].From)
+		spec.Nodes[i].CheckKey = strings.TrimSpace(spec.Nodes[i].CheckKey)
+		spec.Nodes[i].ExistsValue = strings.TrimSpace(spec.Nodes[i].ExistsValue)
+		spec.Nodes[i].MissingValue = strings.TrimSpace(spec.Nodes[i].MissingValue)
+	}
+	for i := range spec.Edges {
+		spec.Edges[i].From = strings.TrimSpace(spec.Edges[i].From)
+		spec.Edges[i].To = strings.TrimSpace(spec.Edges[i].To)
+		if spec.Edges[i].When != nil {
+			spec.Edges[i].When.Key = strings.TrimSpace(spec.Edges[i].When.Key)
+			spec.Edges[i].When.Equals = strings.TrimSpace(spec.Edges[i].When.Equals)
+		}
+	}
+	return spec, nil
 }
 
 func (b *fileBuilder) Name() string {

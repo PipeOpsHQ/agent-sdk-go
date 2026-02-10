@@ -36,6 +36,26 @@ func init() {
 		"Process and transform text: counting, case conversion, extraction, formatting.",
 		func() Tool { return NewTextProcessor() },
 	)
+	MustRegisterTool(
+		"document_generator",
+		"Generate structured documents (plan/report/rfc/runbook/notes) and optionally save them.",
+		func() Tool { return NewDocumentGenerator() },
+	)
+	MustRegisterTool(
+		"pdf_generator",
+		"Generate a simple PDF from text or source file content.",
+		func() Tool { return NewPDFGenerator() },
+	)
+	MustRegisterTool(
+		"google_docs_manager",
+		"Manage Google Docs and Drive documents: create, update, list, and export PDF links.",
+		func() Tool { return NewGoogleDocsManager() },
+	)
+	MustRegisterTool(
+		"document_preview",
+		"Create chat-ready previews and view/download links for generated documents.",
+		func() Tool { return NewDocumentPreview() },
+	)
 
 	// Encoding tools
 	MustRegisterTool(
@@ -90,6 +110,11 @@ func init() {
 		"web_scraper",
 		"Scrape and extract content from web pages.",
 		func() Tool { return NewWebScraper() },
+	)
+	MustRegisterTool(
+		"web_search",
+		"Search the web by query and return top result links/snippets.",
+		func() Tool { return NewWebSearch() },
 	)
 
 	// System tools
@@ -216,6 +241,7 @@ func init() {
 		"url_parser",
 		"regex_matcher",
 		"text_processor",
+		"document_generator",
 	})
 
 	MustRegisterBundle("security", "Security-focused tools", []string{
@@ -237,6 +263,7 @@ func init() {
 
 	MustRegisterBundle("network", "Network and API tools", []string{
 		"http_client",
+		"web_search",
 		"web_scraper",
 		"curl",
 		"dns_lookup",
@@ -262,8 +289,20 @@ func init() {
 
 	MustRegisterBundle("text", "Text processing tools", []string{
 		"text_processor",
+		"document_generator",
+		"pdf_generator",
 		"json_parser",
 		"regex_matcher",
+	})
+
+	MustRegisterBundle("docs", "Document authoring and export tools", []string{
+		"document_generator",
+		"pdf_generator",
+		"google_docs_manager",
+		"document_preview",
+		"file_system",
+		"text_processor",
+		"json_parser",
 	})
 
 	MustRegisterBundle("container", "Container tools", []string{
@@ -306,6 +345,10 @@ func init() {
 		"json_parser",
 		"regex_matcher",
 		"text_processor",
+		"document_generator",
+		"pdf_generator",
+		"google_docs_manager",
+		"document_preview",
 		"base64_codec",
 		"timestamp_converter",
 		"uuid_generator",
@@ -314,6 +357,7 @@ func init() {
 		"code_search",
 		"diff_generator",
 		"http_client",
+		"web_search",
 		"web_scraper",
 		"curl",
 		"dns_lookup",

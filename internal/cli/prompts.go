@@ -1,8 +1,10 @@
-package main
+package cli
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/prompt"
 )
 
 // PromptTemplate defines a named prompt template with variable substitution support.
@@ -84,14 +86,28 @@ var SystemPrompts = map[string]PromptTemplate{
 
 // GetPromptTemplate retrieves a prompt template by name.
 func GetPromptTemplate(name string) (PromptTemplate, bool) {
+	if spec, ok := prompt.Resolve(name); ok {
+		return PromptTemplate{
+			Name:        spec.Name,
+			Description: spec.Description,
+			Content:     spec.System,
+		}, true
+	}
 	tmpl, ok := SystemPrompts[strings.ToLower(strings.TrimSpace(name))]
 	return tmpl, ok
 }
 
 // AvailablePromptNames returns a sorted list of available prompt template names.
 func AvailablePromptNames() []string {
-	names := make([]string, 0, len(SystemPrompts))
+	nameSet := map[string]struct{}{}
+	for _, n := range prompt.Names() {
+		nameSet[n] = struct{}{}
+	}
+	names := make([]string, 0, len(SystemPrompts)+len(nameSet))
 	for name := range SystemPrompts {
+		nameSet[name] = struct{}{}
+	}
+	for name := range nameSet {
 		names = append(names, name)
 	}
 	// Sort for consistent output
@@ -125,12 +141,20 @@ func InterpolatePrompt(prompt string, ctx PromptContext) string {
 func BuildPrompt(customPrompt, templateName string, ctx PromptContext) string {
 	// If custom prompt provided, use it
 	if strings.TrimSpace(customPrompt) != "" {
+		rendered, err := prompt.Render(strings.TrimSpace(customPrompt), promptVars(ctx))
+		if err == nil {
+			return InterpolatePrompt(rendered, ctx)
+		}
 		return InterpolatePrompt(strings.TrimSpace(customPrompt), ctx)
 	}
 
 	// Try to use named template
 	if strings.TrimSpace(templateName) != "" {
 		if tmpl, ok := GetPromptTemplate(templateName); ok {
+			rendered, err := prompt.Render(tmpl.Content, promptVars(ctx))
+			if err == nil {
+				return InterpolatePrompt(rendered, ctx)
+			}
 			return InterpolatePrompt(tmpl.Content, ctx)
 		}
 	}
@@ -138,6 +162,16 @@ func BuildPrompt(customPrompt, templateName string, ctx PromptContext) string {
 	// Fall back to default
 	defaultTmpl := SystemPrompts["default"]
 	return InterpolatePrompt(defaultTmpl.Content, ctx)
+}
+
+func promptVars(ctx PromptContext) map[string]string {
+	return map[string]string{
+		"tool_count":     fmt.Sprintf("%d", ctx.ToolCount),
+		"tool_names":     strings.Join(ctx.ToolNames, ", "),
+		"workflow":       ctx.Workflow,
+		"provider":       ctx.Provider,
+		"execution_mode": ctx.ExecutionMode,
+	}
 }
 
 // ValidatePrompt checks if a prompt is reasonable and returns warnings.

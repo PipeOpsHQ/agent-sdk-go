@@ -113,9 +113,9 @@ func (cm *ContextManager) TrimMessages(
 	if availableTokens <= 0 {
 		// Not enough budget even for overhead, return just the last message
 		if len(messages) > 0 {
-			return messages[len(messages)-1:]
+			return cm.ensureValidStructure(messages[len(messages)-1:])
 		}
-		return messages
+		return cm.ensureValidStructure(messages)
 	}
 
 	// Calculate total tokens needed
@@ -123,7 +123,7 @@ func (cm *ContextManager) TrimMessages(
 
 	// If we're under budget, return all messages
 	if totalTokens <= availableTokens {
-		return messages
+		return cm.ensureValidStructure(messages)
 	}
 
 	// We need to trim - keep messages from the end (most recent)
@@ -165,16 +165,37 @@ func (cm *ContextManager) ensureValidStructure(messages []types.Message) []types
 		return messages
 	}
 
-	// Find orphaned tool results (tool role without preceding tool call)
 	var result []types.Message
 	pendingToolCalls := make(map[string]bool)
+	toolBlockStart := -1
+
+	dropOpenToolBlock := func() {
+		if len(pendingToolCalls) == 0 {
+			return
+		}
+		if toolBlockStart >= 0 && toolBlockStart <= len(result) {
+			result = result[:toolBlockStart]
+		}
+		pendingToolCalls = make(map[string]bool)
+		toolBlockStart = -1
+	}
 
 	for _, msg := range messages {
 		// Track tool calls from assistant messages
 		if msg.Role == types.RoleAssistant {
-			for _, tc := range msg.ToolCalls {
-				pendingToolCalls[tc.ID] = true
+			if len(msg.ToolCalls) > 0 {
+				// New function-call turn starts a strict call/response block.
+				dropOpenToolBlock()
+				toolBlockStart = len(result)
+				result = append(result, msg)
+				for _, tc := range msg.ToolCalls {
+					pendingToolCalls[tc.ID] = true
+				}
+				continue
 			}
+
+			// Plain assistant content cannot appear while a function-call block is unresolved.
+			dropOpenToolBlock()
 			result = append(result, msg)
 			continue
 		}
@@ -184,14 +205,23 @@ func (cm *ContextManager) ensureValidStructure(messages []types.Message) []types
 			if pendingToolCalls[msg.ToolCallID] {
 				result = append(result, msg)
 				delete(pendingToolCalls, msg.ToolCallID)
+				if len(pendingToolCalls) == 0 {
+					toolBlockStart = -1
+				}
 			}
 			// Skip orphaned tool results
 			continue
 		}
 
-		// Include user messages
+		// Any non-tool turn closes unresolved function-call blocks.
+		dropOpenToolBlock()
+
+		// Include user/system/other messages
 		result = append(result, msg)
 	}
+
+	// Drop dangling call turns at the tail.
+	dropOpenToolBlock()
 
 	return result
 }

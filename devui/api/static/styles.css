@@ -1759,10 +1759,12 @@ body {
 }
 
 .playground-container {
+  --playground-panel-height: 620px;
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 20px;
-  min-height: 600px;
+  min-height: var(--playground-panel-height);
+  align-items: start;
 }
 
 .playground-container.with-history {
@@ -1770,21 +1772,29 @@ body {
 }
 
 @media (max-width: 1200px) {
+  .playground-container {
+    --playground-panel-height: 560px;
+  }
   .playground-container.with-history {
     grid-template-columns: 280px 1fr;
   }
   .playground-container.with-history .playground-history {
     grid-column: 1 / -1;
-    max-height: 300px;
+    max-height: none;
   }
 }
 
 @media (max-width: 900px) {
   .playground-container {
     grid-template-columns: 1fr;
+    --playground-panel-height: 520px;
   }
   .playground-container.with-history {
     grid-template-columns: 1fr;
+  }
+  .playground-config {
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -1793,7 +1803,8 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 20px;
-  height: fit-content;
+  max-height: var(--playground-panel-height);
+  overflow-y: auto;
 }
 
 .config-group {
@@ -1819,6 +1830,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: var(--playground-panel-height);
+  min-height: var(--playground-panel-height);
 }
 
 .chat-messages {
@@ -1880,11 +1893,100 @@ body {
   white-space: pre-wrap;
 }
 
+.chat-paragraph {
+  margin: 0 0 8px;
+}
+
+.chat-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.chat-list {
+  margin: 0 0 10px 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.chat-h1,
+.chat-h2,
+.chat-h3 {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+
+.chat-h1 { font-size: 17px; }
+.chat-h2 { font-size: 15px; }
+.chat-h3 { font-size: 14px; }
+
+.chat-inline-code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.chat-code {
+  margin: 0 0 10px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  overflow-x: auto;
+}
+
+.chat-code code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
 .chat-bubble-meta {
   margin-top: 8px;
   font-size: 11px;
   color: var(--text-muted);
   font-family: 'IBM Plex Mono', monospace;
+}
+
+.chat-artifacts {
+  margin-top: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  padding: 8px;
+}
+
+.chat-artifacts-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.artifact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 4px;
+}
+
+.artifact-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-actions {
+  display: flex;
+  gap: 6px;
 }
 
 /* Streaming progress indicator */
@@ -1897,6 +1999,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.streaming-output {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  margin-bottom: 6px;
 }
 
 .streaming-step {
@@ -2047,6 +2156,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: var(--playground-panel-height);
+  min-height: var(--playground-panel-height);
 }
 
 .history-header {

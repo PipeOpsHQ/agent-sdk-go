@@ -1,17 +1,24 @@
 package api
 
-import "context"
+import (
+	"context"
+
+	"github.com/PipeOpsHQ/agent-sdk-go/framework/types"
+)
 
 type PlaygroundRequest struct {
-	Input        string   `json:"input"`
-	SessionID    string   `json:"sessionId,omitempty"`
-	Flow         string   `json:"flow,omitempty"`
-	Workflow     string   `json:"workflow,omitempty"`
-	WorkflowFile string   `json:"workflowFile,omitempty"`
-	Tools        []string `json:"tools,omitempty"`
-	Skills       []string `json:"skills,omitempty"`
-	Guardrails   []string `json:"guardrails,omitempty"`
-	SystemPrompt string   `json:"systemPrompt,omitempty"`
+	Input        string          `json:"input"`
+	SessionID    string          `json:"sessionId,omitempty"`
+	History      []types.Message `json:"history,omitempty"`
+	PromptRef    string          `json:"promptRef,omitempty"`
+	PromptInput  map[string]any  `json:"promptInput,omitempty"`
+	Flow         string          `json:"flow,omitempty"`
+	Workflow     string          `json:"workflow,omitempty"`
+	WorkflowFile string          `json:"workflowFile,omitempty"`
+	Tools        []string        `json:"tools,omitempty"`
+	Skills       []string        `json:"skills,omitempty"`
+	Guardrails   []string        `json:"guardrails,omitempty"`
+	SystemPrompt string          `json:"systemPrompt,omitempty"`
 }
 
 type PlaygroundResponse struct {

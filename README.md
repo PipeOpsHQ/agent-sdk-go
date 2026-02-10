@@ -11,6 +11,14 @@ It combines:
 
 ## What We Have Built
 
+## Running the CLI
+
+- Preferred entrypoint: `go run ./cmd/agent-framework <command>`
+- Backward-compatible entrypoint: `go run . <command>`
+- Examples:
+  - `go run ./cmd/agent-framework run -- "hello"`
+  - `go run ./cmd/agent-framework ui`
+
 ### 1) Runtime Core
 - Agent loop with iterative reasoning + tool invocation
 - Middleware lifecycle hooks:
