@@ -11,6 +11,7 @@ import (
 	"github.com/PipeOpsHQ/agent-sdk-go/devui"
 	"github.com/PipeOpsHQ/agent-sdk-go/flow"
 	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 func main() {
@@ -40,11 +41,16 @@ func main() {
 		log.Fatalf("agent create failed: %v", err)
 	}
 
-	out, err := a.Run(ctx, prompt)
+	result, err := a.RunStream(ctx, prompt, func(chunk types.StreamChunk) error {
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+		}
+		return nil
+	})
 	if err != nil {
 		log.Fatalf("run failed: %v", err)
 	}
-	fmt.Println(out)
+	fmt.Printf("\n\nrun_id=%s session_id=%s\n", result.RunID, result.SessionID)
 }
 
 func runDevUI() {

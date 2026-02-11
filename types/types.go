@@ -16,6 +16,7 @@ const (
 type Message struct {
 	Role       Role       `json:"role"`
 	Content    string     `json:"content,omitempty"`
+	Reasoning  string     `json:"reasoning,omitempty"`
 	Name       string     `json:"name,omitempty"` // Tool name for tool role messages.
 	ToolCallID string     `json:"toolCallId,omitempty"`
 	ToolCalls  []ToolCall `json:"toolCalls,omitempty"`
@@ -51,6 +52,11 @@ type Usage struct {
 type Response struct {
 	Message Message `json:"message"`
 	Usage   *Usage  `json:"usage,omitempty"`
+}
+
+type StreamChunk struct {
+	Text string `json:"text,omitempty"`
+	Done bool   `json:"done,omitempty"`
 }
 
 type RunResult struct {

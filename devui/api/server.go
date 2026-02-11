@@ -24,6 +24,7 @@ import (
 	cronpkg "github.com/PipeOpsHQ/agent-sdk-go/runtime/cron"
 	"github.com/PipeOpsHQ/agent-sdk-go/state"
 	fwtools "github.com/PipeOpsHQ/agent-sdk-go/tools"
+	fwtypes "github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 //go:embed static/*
@@ -778,6 +779,8 @@ func (s *Server) handlePlaygroundStream(w http.ResponseWriter, r *http.Request, 
 	// Subscribe to the event stream to capture events during this run
 	subID, eventCh := s.stream.subscribe(64)
 	defer s.stream.unsubscribe(subID)
+	streamRunner, canStream := s.cfg.Playground.(PlaygroundStreamRunner)
+	chunkCh := make(chan fwtypes.StreamChunk, 128)
 
 	// Run playground in a goroutine, stream events as they arrive
 	type runResult struct {
@@ -786,7 +789,22 @@ func (s *Server) handlePlaygroundStream(w http.ResponseWriter, r *http.Request, 
 	}
 	done := make(chan runResult, 1)
 	go func() {
-		resp, err := s.cfg.Playground.Run(r.Context(), req)
+		var (
+			resp PlaygroundResponse
+			err  error
+		)
+		if canStream {
+			resp, err = streamRunner.RunStream(r.Context(), req, func(chunk fwtypes.StreamChunk) error {
+				select {
+				case chunkCh <- chunk:
+					return nil
+				case <-r.Context().Done():
+					return r.Context().Err()
+				}
+			})
+		} else {
+			resp, err = s.cfg.Playground.Run(r.Context(), req)
+		}
 		done <- runResult{resp, err}
 	}()
 
@@ -799,6 +817,10 @@ func (s *Server) handlePlaygroundStream(w http.ResponseWriter, r *http.Request, 
 	// Stream events until the run completes
 	for {
 		select {
+		case chunk := <-chunkCh:
+			if strings.TrimSpace(chunk.Text) != "" {
+				sendSSE("delta", map[string]any{"text": chunk.Text})
+			}
 		case event := <-eventCh:
 			sendSSE("progress", map[string]any{
 				"kind":     event.Kind,
@@ -809,6 +831,19 @@ func (s *Server) handlePlaygroundStream(w http.ResponseWriter, r *http.Request, 
 				"runId":    event.RunID,
 			})
 		case result := <-done:
+			if canStream {
+				for {
+					select {
+					case chunk := <-chunkCh:
+						if strings.TrimSpace(chunk.Text) != "" {
+							sendSSE("delta", map[string]any{"text": chunk.Text})
+						}
+					default:
+						goto chunksDrained
+					}
+				}
+			}
+		chunksDrained:
 			// Drain any remaining events
 			for {
 				select {
@@ -836,9 +871,11 @@ func (s *Server) handlePlaygroundStream(w http.ResponseWriter, r *http.Request, 
 				if strings.TrimSpace(resp.Status) == "" {
 					resp.Status = "completed"
 				}
-				if out := strings.TrimSpace(resp.Output); out != "" {
-					for _, chunk := range splitOutputChunks(out, 180) {
-						sendSSE("delta", map[string]any{"text": chunk})
+				if !canStream {
+					if out := strings.TrimSpace(resp.Output); out != "" {
+						for _, chunk := range splitOutputChunks(out, 180) {
+							sendSSE("delta", map[string]any{"text": chunk})
+						}
 					}
 				}
 				sendSSE("complete", resp)

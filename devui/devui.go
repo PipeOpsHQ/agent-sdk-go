@@ -72,6 +72,7 @@ import (
 	"github.com/PipeOpsHQ/agent-sdk-go/state"
 	statefactory "github.com/PipeOpsHQ/agent-sdk-go/state/factory"
 	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	fwtypes "github.com/PipeOpsHQ/agent-sdk-go/types"
 	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
 )
 
@@ -619,6 +620,175 @@ func (r *playgroundRunner) Run(ctx context.Context, req devuiapi.PlaygroundReque
 	result, runErr := exec.Run(runCtx, req.Input)
 	if runErr != nil {
 		return devuiapi.PlaygroundResponse{}, runErr
+	}
+	return devuiapi.PlaygroundResponse{
+		Status:        "completed",
+		Output:        result.Output,
+		RunID:         result.RunID,
+		SessionID:     result.SessionID,
+		Provider:      provider.Name(),
+		AppliedSkills: appliedSkills,
+		ReplyTo:       req.ReplyTo,
+	}, nil
+}
+
+func (r *playgroundRunner) RunStream(ctx context.Context, req devuiapi.PlaygroundRequest, onChunk func(fwtypes.StreamChunk) error) (devuiapi.PlaygroundResponse, error) {
+	if onChunk == nil {
+		return devuiapi.PlaygroundResponse{}, fmt.Errorf("stream callback is required")
+	}
+	provider, err := providerfactory.FromEnv(ctx)
+	if err != nil {
+		return devuiapi.PlaygroundResponse{}, fmt.Errorf("provider setup failed: %w", err)
+	}
+
+	var flowSkills []string
+	if name := strings.TrimSpace(req.Flow); name != "" {
+		if f, ok := flow.Get(name); ok {
+			if strings.TrimSpace(req.Workflow) == "" {
+				req.Workflow = f.Workflow
+			}
+			if len(req.Tools) == 0 {
+				req.Tools = f.Tools
+			}
+			if strings.TrimSpace(req.SystemPrompt) == "" {
+				req.SystemPrompt = f.SystemPrompt
+			}
+			flowSkills = f.Skills
+		}
+	}
+
+	wfName := strings.TrimSpace(req.Workflow)
+	systemPrompt := strings.TrimSpace(req.SystemPrompt)
+	if systemPrompt == "" {
+		systemPrompt = "You are a practical AI assistant. Be concise, accurate, and actionable."
+	}
+
+	allSkills := make(map[string]bool)
+	for _, s := range flowSkills {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			allSkills[s] = true
+		}
+	}
+	for _, s := range req.Skills {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			allSkills[s] = true
+		}
+	}
+	appliedSkills := sortedSkillNames(allSkills)
+	for skillName := range allSkills {
+		if s, ok := skill.Get(skillName); ok {
+			if s.Instructions != "" {
+				systemPrompt += "\n\n## Skill: " + s.Name + "\n" + s.Instructions
+			}
+			if len(s.AllowedTools) > 0 {
+				req.Tools = append(req.Tools, s.AllowedTools...)
+			}
+		}
+	}
+	req.ReplyTo = delivery.Normalize(req.ReplyTo)
+	if req.ReplyTo != nil {
+		systemPrompt = strings.TrimSpace(systemPrompt + "\n\n" + buildReplyChannelHint(req.ReplyTo))
+	}
+	runCtx := delivery.WithTarget(ctx, req.ReplyTo)
+	runCtx = delivery.WithTurnType(runCtx, "user")
+
+	agentOpts := []agentfw.Option{
+		agentfw.WithSystemPrompt(systemPrompt),
+		agentfw.WithMaxIterations(25),
+	}
+
+	if len(req.Guardrails) > 0 {
+		pipeline := guardrail.NewPipeline()
+		for _, name := range req.Guardrails {
+			switch name {
+			case "max_length":
+				pipeline.Add(&guardrail.MaxLength{Limit: 10000})
+			case "prompt_injection":
+				pipeline.AddInput(&guardrail.PromptInjection{})
+			case "content_filter":
+				pipeline.Add(&guardrail.ContentFilter{})
+			case "pii_filter":
+				pipeline.Add(&guardrail.PIIFilter{})
+			case "topic_filter":
+				pipeline.Add(&guardrail.TopicFilter{})
+			case "secret_guard":
+				pipeline.Add(&guardrail.SecretGuard{})
+			}
+		}
+		agentOpts = append(agentOpts, agentfw.WithMiddleware(guardrail.NewAgentMiddleware(pipeline)))
+	}
+
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID != "" {
+		agentOpts = append(agentOpts, agentfw.WithSessionID(sessionID))
+		if r.store != nil {
+			prevRuns, _ := r.store.ListRuns(ctx, state.ListRunsQuery{
+				SessionID: sessionID,
+				Status:    "completed",
+				Limit:     1,
+			})
+			if len(prevRuns) > 0 && len(prevRuns[0].Messages) > 0 {
+				agentOpts = append(agentOpts, agentfw.WithConversationHistory(prevRuns[0].Messages))
+			}
+		}
+	}
+
+	if r.store != nil {
+		agentOpts = append(agentOpts, agentfw.WithStore(r.store))
+	}
+	if r.observer != nil {
+		agentOpts = append(agentOpts, agentfw.WithObserver(r.observer))
+	}
+
+	if len(req.Tools) > 0 {
+		selected, err := tools.BuildSelection(req.Tools)
+		if err != nil {
+			return devuiapi.PlaygroundResponse{}, fmt.Errorf("tool selection failed: %w", err)
+		}
+		for _, t := range selected {
+			agentOpts = append(agentOpts, agentfw.WithTool(t))
+		}
+	}
+
+	agent, err := agentfw.New(provider, agentOpts...)
+	if err != nil {
+		return devuiapi.PlaygroundResponse{}, fmt.Errorf("agent create failed: %w", err)
+	}
+
+	if wfName == "" {
+		result, runErr := agent.RunStream(runCtx, req.Input, onChunk)
+		if runErr != nil {
+			return devuiapi.PlaygroundResponse{}, runErr
+		}
+		return devuiapi.PlaygroundResponse{
+			Status:        "completed",
+			Output:        result.Output,
+			RunID:         result.RunID,
+			SessionID:     result.SessionID,
+			Provider:      provider.Name(),
+			AppliedSkills: appliedSkills,
+			ReplyTo:       req.ReplyTo,
+		}, nil
+	}
+
+	exec, err := buildExecutor(agent, r.store, r.observer, wfName)
+	if err != nil {
+		return devuiapi.PlaygroundResponse{}, fmt.Errorf("executor create failed: %w", err)
+	}
+	result, runErr := exec.Run(runCtx, req.Input)
+	if runErr != nil {
+		return devuiapi.PlaygroundResponse{}, runErr
+	}
+	if strings.TrimSpace(result.Output) != "" {
+		if err := onChunk(fwtypes.StreamChunk{Text: result.Output, Done: true}); err != nil {
+			return devuiapi.PlaygroundResponse{}, err
+		}
+	} else {
+		if err := onChunk(fwtypes.StreamChunk{Done: true}); err != nil {
+			return devuiapi.PlaygroundResponse{}, err
+		}
 	}
 	return devuiapi.PlaygroundResponse{
 		Status:        "completed",

@@ -769,3 +769,97 @@ func TestAgent_Middleware_OnErrorIsCalled(t *testing.T) {
 		t.Fatalf("unexpected error stage: %q", errorSeen.Stage)
 	}
 }
+
+type streamProvider struct{}
+
+func (p *streamProvider) Name() string { return "stream-provider" }
+
+func (p *streamProvider) Capabilities() llm.Capabilities {
+	return llm.Capabilities{Streaming: true}
+}
+
+func (p *streamProvider) Generate(ctx context.Context, req types.Request) (types.Response, error) {
+	_ = ctx
+	_ = req
+	return types.Response{Message: types.Message{Role: types.RoleAssistant, Content: "fallback"}}, nil
+}
+
+func (p *streamProvider) GenerateStream(ctx context.Context, req types.Request, onChunk func(types.StreamChunk) error) (types.Response, error) {
+	_ = ctx
+	_ = req
+	if err := onChunk(types.StreamChunk{Text: "hello "}); err != nil {
+		return types.Response{}, err
+	}
+	if err := onChunk(types.StreamChunk{Text: "world"}); err != nil {
+		return types.Response{}, err
+	}
+	if err := onChunk(types.StreamChunk{Done: true}); err != nil {
+		return types.Response{}, err
+	}
+	return types.Response{Message: types.Message{Role: types.RoleAssistant, Content: "hello world"}}, nil
+}
+
+func TestAgent_RunLite_SkipsToolsAndStore(t *testing.T) {
+	store := newMemoryStateStore()
+	a, err := New(
+		&simpleProvider{},
+		WithStore(store),
+		WithTool(tools.NewFuncTool(
+			"side_effect_tool",
+			"unused in lite mode",
+			map[string]any{"type": "object"},
+			func(ctx context.Context, args json.RawMessage) (any, error) {
+				_ = ctx
+				_ = args
+				return map[string]any{"ok": true}, nil
+			},
+		)),
+	)
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	out, err := a.RunLite(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("RunLite failed: %v", err)
+	}
+	if out != "ok" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+
+	runs, err := store.ListRuns(context.Background(), state.ListRunsQuery{})
+	if err != nil {
+		t.Fatalf("list runs failed: %v", err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("RunLite should not persist run records, got %d", len(runs))
+	}
+}
+
+func TestAgent_RunStream_EmitsChunks(t *testing.T) {
+	a, err := New(&streamProvider{})
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	chunks := make([]types.StreamChunk, 0, 3)
+	result, err := a.RunStream(context.Background(), "hello", func(chunk types.StreamChunk) error {
+		chunks = append(chunks, chunk)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("RunStream failed: %v", err)
+	}
+	if result.Output != "hello world" {
+		t.Fatalf("unexpected stream output: %q", result.Output)
+	}
+	if result.RunID == "" || result.SessionID == "" {
+		t.Fatalf("expected run/session ids in stream result: %#v", result)
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 stream chunks, got %d", len(chunks))
+	}
+	if chunks[0].Text != "hello " || chunks[1].Text != "world" || !chunks[2].Done {
+		t.Fatalf("unexpected chunks: %#v", chunks)
+	}
+}

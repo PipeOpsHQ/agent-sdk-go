@@ -13,6 +13,7 @@ import (
 	"github.com/PipeOpsHQ/agent-sdk-go/flow"
 	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
 	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 type riskInput struct {
@@ -85,13 +86,17 @@ func main() {
 		"Return: score, tier, and top 3 immediate remediation priorities.",
 	}, " ")
 
-	result, err := a.RunDetailed(ctx, prompt)
+	result, err := a.RunStream(ctx, prompt, func(chunk types.StreamChunk) error {
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+		}
+		return nil
+	})
 	if err != nil {
 		log.Fatalf("run failed: %v", err)
 	}
 
-	fmt.Printf("run_id=%s session_id=%s\n\n", result.RunID, result.SessionID)
-	fmt.Println(result.Output)
+	fmt.Printf("\n\nrun_id=%s session_id=%s\n", result.RunID, result.SessionID)
 }
 
 func runDevUI() {

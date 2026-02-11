@@ -37,3 +37,7 @@ type PlaygroundResponse struct {
 type PlaygroundRunner interface {
 	Run(ctx context.Context, req PlaygroundRequest) (PlaygroundResponse, error)
 }
+
+type PlaygroundStreamRunner interface {
+	RunStream(ctx context.Context, req PlaygroundRequest, onChunk func(types.StreamChunk) error) (PlaygroundResponse, error)
+}

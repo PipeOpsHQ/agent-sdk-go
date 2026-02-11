@@ -43,6 +43,7 @@ import (
 	providerfactory "github.com/PipeOpsHQ/agent-sdk-go/providers/factory"
 	statefactory "github.com/PipeOpsHQ/agent-sdk-go/state/factory"
 	fwtools "github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 const systemPrompt = `You are an expert full-stack DevOps engineer with access to a comprehensive toolkit.
@@ -129,13 +130,18 @@ func main() {
 	fmt.Printf("🛠  All-Tools Agent (%d tools loaded)\n", len(allTools))
 	fmt.Printf("📝 Prompt: %s\n\n", prompt)
 
-	result, err := agent.RunDetailed(ctx, prompt)
+	result, err := agent.RunStream(ctx, prompt, func(chunk types.StreamChunk) error {
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+		}
+		return nil
+	})
 	if err != nil {
 		log.Fatalf("run failed: %v", err)
 	}
 
 	fmt.Println(strings.Repeat("─", 60))
-	fmt.Println(result.Output)
+	fmt.Println()
 	fmt.Println(strings.Repeat("─", 60))
 	fmt.Printf("\nrun_id=%s session_id=%s provider=%s\n", result.RunID, result.SessionID, result.Provider)
 }

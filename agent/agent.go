@@ -218,6 +218,108 @@ func (a *Agent) Run(ctx context.Context, input string) (string, error) {
 	return result.Output, nil
 }
 
+// RunLite executes a single provider turn without persistence, middleware,
+// context trimming, or tool execution overhead.
+func (a *Agent) RunLite(ctx context.Context, input string) (string, error) {
+	resp, err := a.RunLiteDetailed(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	return resp.Message.Content, nil
+}
+
+// RunLiteDetailed is the low-overhead variant of RunDetailed.
+func (a *Agent) RunLiteDetailed(ctx context.Context, input string) (types.Response, error) {
+	if input == "" {
+		return types.Response{}, errors.New("input is required")
+	}
+	messages := a.buildInitialMessages(input)
+	req := types.Request{
+		SystemPrompt:    a.systemPrompt,
+		Messages:        messages,
+		MaxOutputTokens: a.maxOutputTokens,
+		ResponseSchema:  a.responseSchema,
+	}
+	resp, err := a.generateWithRetry(ctx, req)
+	if err != nil {
+		return types.Response{}, fmt.Errorf("generation failed: %w", err)
+	}
+	resp.Message.Role = types.RoleAssistant
+	return resp, nil
+}
+
+// RunStream executes one generation turn and streams text chunks when the
+// provider supports it. When streaming is unavailable, it falls back to RunLite.
+func (a *Agent) RunStream(ctx context.Context, input string, onChunk func(types.StreamChunk) error) (types.RunResult, error) {
+	if input == "" {
+		return types.RunResult{}, errors.New("input is required")
+	}
+	if onChunk == nil {
+		return types.RunResult{}, errors.New("onChunk is required")
+	}
+
+	messages := a.buildInitialMessages(input)
+	runID := uuid.NewString()
+	sessionID := a.ensureSessionID()
+	start := time.Now().UTC()
+
+	sp, ok := a.provider.(llm.StreamProvider)
+	if !ok {
+		resp, err := a.RunLiteDetailed(ctx, input)
+		if err != nil {
+			return types.RunResult{}, err
+		}
+		if err := onChunk(types.StreamChunk{Text: resp.Message.Content, Done: true}); err != nil {
+			return types.RunResult{}, err
+		}
+		completed := time.Now().UTC()
+		resp.Message.Role = types.RoleAssistant
+		all := append(messages, resp.Message)
+		return types.RunResult{
+			Output:      resp.Message.Content,
+			Messages:    all,
+			Usage:       resp.Usage,
+			Iterations:  1,
+			Provider:    a.provider.Name(),
+			RunID:       runID,
+			SessionID:   sessionID,
+			StartedAt:   &start,
+			CompletedAt: &completed,
+		}, nil
+	}
+
+	toolDefs := a.listToolDefinitions()
+	trimmed := messages
+	if a.contextManager != nil {
+		trimmed = a.contextManager.TrimMessages(messages, a.systemPrompt, toolDefs, a.maxOutputTokens)
+	}
+	req := types.Request{
+		SystemPrompt:    a.systemPrompt,
+		Messages:        trimmed,
+		Tools:           toolDefs,
+		MaxOutputTokens: a.maxOutputTokens,
+		ResponseSchema:  a.responseSchema,
+	}
+	resp, err := sp.GenerateStream(ctx, req, onChunk)
+	if err != nil {
+		return types.RunResult{}, fmt.Errorf("generation failed: %w", err)
+	}
+	resp.Message.Role = types.RoleAssistant
+	all := append(messages, resp.Message)
+	completed := time.Now().UTC()
+	return types.RunResult{
+		Output:      resp.Message.Content,
+		Messages:    all,
+		Usage:       resp.Usage,
+		Iterations:  1,
+		Provider:    a.provider.Name(),
+		RunID:       runID,
+		SessionID:   sessionID,
+		StartedAt:   &start,
+		CompletedAt: &completed,
+	}, nil
+}
+
 func (a *Agent) RunDetailed(ctx context.Context, input string) (types.RunResult, error) {
 	if input == "" {
 		return types.RunResult{}, errors.New("input is required")
@@ -228,18 +330,7 @@ func (a *Agent) RunDetailed(ctx context.Context, input string) (types.RunResult,
 	startedAt := time.Now().UTC()
 	metadata := runMetadataFromContext(ctx)
 
-	// Prepend conversation history for multi-turn context, then add current input.
-	var messages []types.Message
-	if len(a.conversationHistory) > 0 {
-		messages = make([]types.Message, 0, len(a.conversationHistory)+1)
-		for _, m := range a.conversationHistory {
-			// Only carry forward user/assistant content messages (skip tool call details).
-			if m.Role == types.RoleUser || (m.Role == types.RoleAssistant && m.Content != "" && len(m.ToolCalls) == 0) {
-				messages = append(messages, types.Message{Role: m.Role, Content: m.Content})
-			}
-		}
-	}
-	messages = append(messages, types.Message{Role: types.RoleUser, Content: input})
+	messages := a.buildInitialMessages(input)
 	usage := &types.Usage{}
 	hasUsage := false
 	events := []types.Event{
@@ -959,6 +1050,20 @@ func (a *Agent) emitRuntimeEvent(ctx context.Context, event types.Event) {
 		return
 	}
 	_ = a.observer.Emit(ctx, observe.FromRuntimeEvent(event))
+}
+
+func (a *Agent) buildInitialMessages(input string) []types.Message {
+	var messages []types.Message
+	if len(a.conversationHistory) > 0 {
+		messages = make([]types.Message, 0, len(a.conversationHistory)+1)
+		for _, m := range a.conversationHistory {
+			if m.Role == types.RoleUser || (m.Role == types.RoleAssistant && m.Content != "" && len(m.ToolCalls) == 0) {
+				messages = append(messages, types.Message{Role: m.Role, Content: m.Content})
+			}
+		}
+	}
+	messages = append(messages, types.Message{Role: types.RoleUser, Content: input})
+	return messages
 }
 
 // RegisterTool adds a tool to the agent at runtime.

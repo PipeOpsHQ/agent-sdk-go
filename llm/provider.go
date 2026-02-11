@@ -20,3 +20,9 @@ type Provider interface {
 	Capabilities() Capabilities
 	Generate(ctx context.Context, req types.Request) (types.Response, error)
 }
+
+// StreamProvider is an optional extension for providers that can emit
+// incremental output chunks during generation.
+type StreamProvider interface {
+	GenerateStream(ctx context.Context, req types.Request, onChunk func(types.StreamChunk) error) (types.Response, error)
+}

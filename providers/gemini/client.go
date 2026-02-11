@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	"google.golang.org/genai"
@@ -50,7 +51,7 @@ func (c *Client) Name() string { return "gemini" }
 func (c *Client) Capabilities() llm.Capabilities {
 	return llm.Capabilities{
 		Tools:            true,
-		Streaming:        false,
+		Streaming:        true,
 		StructuredOutput: true,
 	}
 }
@@ -66,7 +67,7 @@ func (c *Client) Generate(ctx context.Context, req types.Request) (types.Respons
 		config.SystemInstruction = genai.NewContentFromText(req.SystemPrompt, genai.RoleUser)
 	}
 	if req.MaxOutputTokens > 0 {
-		config.MaxOutputTokens = int32(req.MaxOutputTokens)
+		config.MaxOutputTokens = clampInt32(req.MaxOutputTokens)
 	}
 	if len(req.Tools) > 0 {
 		config.Tools = []*genai.Tool{
@@ -83,14 +84,78 @@ func (c *Client) Generate(ctx context.Context, req types.Request) (types.Respons
 	if err != nil {
 		return types.Response{}, fmt.Errorf("gemini generation failed: %w", err)
 	}
-	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+	return parseGeminiResponse(resp), nil
+}
+
+func (c *Client) GenerateStream(ctx context.Context, req types.Request, onChunk func(types.StreamChunk) error) (types.Response, error) {
+	if onChunk == nil {
+		return types.Response{}, fmt.Errorf("onChunk is required")
+	}
+	model := c.model
+	if req.Model != "" {
+		model = req.Model
+	}
+
+	config := &genai.GenerateContentConfig{}
+	if req.SystemPrompt != "" {
+		config.SystemInstruction = genai.NewContentFromText(req.SystemPrompt, genai.RoleUser)
+	}
+	if req.MaxOutputTokens > 0 {
+		config.MaxOutputTokens = clampInt32(req.MaxOutputTokens)
+	}
+	if len(req.Tools) > 0 {
+		config.Tools = []*genai.Tool{
+			{FunctionDeclarations: toGeminiFunctionDeclarations(req.Tools)},
+		}
+		config.ToolConfig = &genai.ToolConfig{
+			FunctionCallingConfig: &genai.FunctionCallingConfig{
+				Mode: genai.FunctionCallingConfigModeAuto,
+			},
+		}
+	}
+
+	var last *genai.GenerateContentResponse
+	stream := c.client.Models.GenerateContentStream(ctx, model, toGeminiContents(req.Messages), config)
+	for chunk, err := range stream {
+		if err != nil {
+			return types.Response{}, fmt.Errorf("gemini generation failed: %w", err)
+		}
+		if chunk == nil {
+			continue
+		}
+		last = chunk
+
+		if len(chunk.Candidates) == 0 || chunk.Candidates[0].Content == nil {
+			continue
+		}
+		candidate := chunk.Candidates[0].Content
+		for _, part := range candidate.Parts {
+			if part == nil || part.Text == "" || part.Thought {
+				continue
+			}
+			if err := onChunk(types.StreamChunk{Text: part.Text}); err != nil {
+				return types.Response{}, err
+			}
+		}
+	}
+
+	if last == nil {
+		return types.Response{}, fmt.Errorf("gemini generation failed: empty stream")
+	}
+	resp := parseGeminiResponse(last)
+	if err := onChunk(types.StreamChunk{Done: true}); err != nil {
+		return types.Response{}, err
+	}
+	return resp, nil
+}
+
+func parseGeminiResponse(resp *genai.GenerateContentResponse) types.Response {
+	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
 		fallback := "I could not produce a response from Gemini for this step. Please continue with the task using available tools and provide the best next result."
-		if resp.PromptFeedback != nil && strings.TrimSpace(resp.PromptFeedback.BlockReasonMessage) != "" {
+		if resp != nil && resp.PromptFeedback != nil && strings.TrimSpace(resp.PromptFeedback.BlockReasonMessage) != "" {
 			fallback = "Gemini returned no candidates: " + strings.TrimSpace(resp.PromptFeedback.BlockReasonMessage)
 		}
-		return types.Response{
-			Message: types.Message{Role: types.RoleAssistant, Content: fallback},
-		}, nil
+		return types.Response{Message: types.Message{Role: types.RoleAssistant, Content: fallback}}
 	}
 
 	candidate := resp.Candidates[0].Content
@@ -99,8 +164,12 @@ func (c *Client) Generate(ctx context.Context, req types.Request) (types.Respons
 		if part == nil {
 			continue
 		}
-		if part.Text != "" && !part.Thought {
-			out.Content += part.Text
+		if part.Text != "" {
+			if part.Thought {
+				out.Reasoning += part.Text
+			} else {
+				out.Content += part.Text
+			}
 		}
 		if part.FunctionCall != nil {
 			args := part.FunctionCall.Args
@@ -116,6 +185,7 @@ func (c *Client) Generate(ctx context.Context, req types.Request) (types.Respons
 		}
 	}
 	out.Content = strings.TrimSpace(out.Content)
+	out.Reasoning = strings.TrimSpace(out.Reasoning)
 
 	var usage *types.Usage
 	if resp.UsageMetadata != nil {
@@ -126,10 +196,17 @@ func (c *Client) Generate(ctx context.Context, req types.Request) (types.Respons
 		}
 	}
 
-	return types.Response{
-		Message: out,
-		Usage:   usage,
-	}, nil
+	return types.Response{Message: out, Usage: usage}
+}
+
+func clampInt32(v int) int32 {
+	if v <= 0 {
+		return 0
+	}
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(v)
 }
 
 func toGeminiFunctionDeclarations(defs []types.ToolDefinition) []*genai.FunctionDeclaration {

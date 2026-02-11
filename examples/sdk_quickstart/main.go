@@ -19,6 +19,7 @@ import (
 	stateredis "github.com/PipeOpsHQ/agent-sdk-go/state/redis"
 	statesqlite "github.com/PipeOpsHQ/agent-sdk-go/state/sqlite"
 	"github.com/PipeOpsHQ/agent-sdk-go/tools"
+	"github.com/PipeOpsHQ/agent-sdk-go/types"
 )
 
 func main() {
@@ -63,11 +64,16 @@ func main() {
 	}
 
 	// 1) Single-agent run.
-	runResult, err := agent.RunDetailed(ctx, "Explain zero trust in 3 bullets.")
+	runResult, err := agent.RunStream(ctx, "Explain zero trust in 3 bullets.", func(chunk types.StreamChunk) error {
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+		}
+		return nil
+	})
 	if err != nil {
 		log.Fatalf("agent run failed: %v", err)
 	}
-	fmt.Printf("single-run output:\n%s\n\n", runResult.Output)
+	fmt.Printf("\n\n")
 	fmt.Printf("single-run ids: run=%s session=%s\n\n", runResult.RunID, runResult.SessionID)
 
 	// 2) Static graph run with 3 nodes.
