@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -441,16 +440,4 @@ func (s *Store) checkpointSeqPattern(runID string) string {
 
 func (s *Store) lockKey(runID string) string {
 	return fmt.Sprintf("%s:lock:run:%s", s.prefix, runID)
-}
-
-func parseSeqFromKey(key string) int {
-	parts := strings.Split(key, ":")
-	if len(parts) == 0 {
-		return -1
-	}
-	seq, err := strconv.Atoi(parts[len(parts)-1])
-	if err != nil {
-		return -1
-	}
-	return seq
 }

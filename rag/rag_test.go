@@ -32,7 +32,7 @@ func (f *fakeEmbedder) Embed(_ context.Context, text string) ([]float64, error) 
 func (f *fakeEmbedder) EmbedBatch(_ context.Context, texts []string) ([][]float64, error) {
 	vecs := make([][]float64, len(texts))
 	for i, t := range texts {
-		v, err := f.Embed(nil, t)
+		v, err := f.Embed(context.TODO(), t)
 		if err != nil {
 			return nil, err
 		}

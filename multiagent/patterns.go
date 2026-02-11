@@ -562,7 +562,7 @@ func checkConsensus(responses map[string]string) bool {
 				check = check[:100]
 			}
 			// Very simple similarity - in production use proper NLP
-			if !strings.Contains(v, first[:min(20, len(first))]) {
+			if !strings.Contains(check, first[:min(20, len(first))]) {
 				return false
 			}
 		}

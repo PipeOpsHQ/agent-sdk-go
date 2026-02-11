@@ -277,16 +277,3 @@ func TestCheckConsensus(t *testing.T) {
 		}
 	})
 }
-
-// MockProvider for testing
-type mockProvider struct {
-	name     string
-	response string
-	err      error
-}
-
-func (m *mockProvider) Name() string { return m.name }
-
-func (m *mockProvider) Generate(ctx context.Context, req interface{}) (interface{}, error) {
-	return nil, m.err
-}

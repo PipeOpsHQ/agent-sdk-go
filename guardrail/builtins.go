@@ -198,7 +198,7 @@ func (g *TopicFilter) CheckInput(_ context.Context, input string) (Result, error
 }
 
 func (g *TopicFilter) CheckOutput(_ context.Context, output string) (Result, error) {
-	return g.CheckInput(nil, output)
+	return g.CheckInput(context.TODO(), output)
 }
 
 // SecretGuard detects secrets in input/output using patterns from the tools package.

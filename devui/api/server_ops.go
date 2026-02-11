@@ -17,6 +17,8 @@ import (
 	"github.com/PipeOpsHQ/agent-sdk-go/state"
 	"github.com/PipeOpsHQ/agent-sdk-go/types"
 	"github.com/PipeOpsHQ/agent-sdk-go/workflow"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type interventionRequest struct {
@@ -38,12 +40,6 @@ type commandExecuteResponse struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message"`
 	CLI     string `json:"cli,omitempty"`
-}
-
-type workerOverride struct {
-	Status    string    `json:"status"`
-	Reason    string    `json:"reason,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 func eventMatchesFilter(event observe.Event, runIDFilter string, kindFilter string, statusFilter string) bool {
@@ -560,7 +556,7 @@ func (s *Server) workflowTopology(ctx context.Context, workflowName string) map[
 				xStep := 240
 				for i, ni := range nodeInfos {
 					label := strings.ReplaceAll(ni.ID, "_", " ")
-					label = strings.Title(label)
+					label = cases.Title(language.Und).String(label)
 					nodes = append(nodes, node{
 						ID:    ni.ID,
 						Label: label,

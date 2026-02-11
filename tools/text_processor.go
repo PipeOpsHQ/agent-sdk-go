@@ -9,6 +9,9 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type textProcessorArgs struct {
@@ -121,7 +124,7 @@ func processText(args textProcessorArgs) (*TextResult, error) {
 		return &TextResult{Success: true, Result: strings.ToLower(text)}, nil
 
 	case "titlecase":
-		return &TextResult{Success: true, Result: strings.Title(text)}, nil
+		return &TextResult{Success: true, Result: cases.Title(language.Und).String(text)}, nil
 
 	case "trim":
 		return &TextResult{Success: true, Result: strings.TrimSpace(text)}, nil

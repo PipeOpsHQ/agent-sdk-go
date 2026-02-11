@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 const instrumentationName = "github.com/PipeOpsHQ/agent-sdk-go/framework"
@@ -27,7 +28,7 @@ type Sink struct {
 // If tp is nil, it uses a noop tracer provider.
 func NewSink(tp trace.TracerProvider) *Sink {
 	if tp == nil {
-		tp = trace.NewNoopTracerProvider()
+		tp = noop.NewTracerProvider()
 	}
 	return &Sink{
 		tracer: tp.Tracer(instrumentationName),

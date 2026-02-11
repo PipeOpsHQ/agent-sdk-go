@@ -107,15 +107,6 @@ func NewMemoryStore() Tool {
 	)
 }
 
-func getNamespace(namespace string) map[string]*MemoryEntry {
-	memoryMu.Lock()
-	defer memoryMu.Unlock()
-	if memoryStore[namespace] == nil {
-		memoryStore[namespace] = make(map[string]*MemoryEntry)
-	}
-	return memoryStore[namespace]
-}
-
 func memSet(namespace, key string, value any, ttl int) (*MemoryResult, error) {
 	if key == "" {
 		return &MemoryResult{Success: false, Error: "key is required"}, nil

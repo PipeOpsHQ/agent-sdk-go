@@ -171,7 +171,7 @@ func TestPipeline(t *testing.T) {
 	}
 
 	// PII redaction
-	text, results, err = p.CheckInput(context.Background(), "My email is user@test.com")
+	text, _, err = p.CheckInput(context.Background(), "My email is user@test.com")
 	if err != nil {
 		t.Fatal(err)
 	}

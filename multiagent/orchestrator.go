@@ -73,9 +73,8 @@ type Orchestrator struct {
 	observer observe.Sink
 	store    state.Store
 
-	mu      sync.RWMutex
-	agents  map[string]*ManagedAgent
-	running bool
+	mu     sync.RWMutex
+	agents map[string]*ManagedAgent
 }
 
 // ManagedAgent wraps an agent with metadata.
