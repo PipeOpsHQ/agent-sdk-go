@@ -51,6 +51,7 @@ import (
 	agentfw "github.com/PipeOpsHQ/agent-sdk-go/agent"
 	"github.com/PipeOpsHQ/agent-sdk-go/delivery"
 	devuiapi "github.com/PipeOpsHQ/agent-sdk-go/devui/api"
+	devuiauth "github.com/PipeOpsHQ/agent-sdk-go/devui/auth"
 	authsqlite "github.com/PipeOpsHQ/agent-sdk-go/devui/auth/sqlite"
 	catalogsqlite "github.com/PipeOpsHQ/agent-sdk-go/devui/catalog/sqlite"
 	"github.com/PipeOpsHQ/agent-sdk-go/flow"
@@ -100,6 +101,17 @@ type Options struct {
 	// AllowLocalNoAuth allows unauthenticated access from localhost.
 	// Default: true. Env: AGENT_UI_ALLOW_LOCAL_NOAUTH.
 	AllowLocalNoAuth bool
+
+	// BootstrapAPIKey ensures an exact API key secret exists in auth storage
+	// at startup. Useful for containerized deployments that need deterministic
+	// credentials without running ui-admin manually.
+	// Env: AGENT_UI_BOOTSTRAP_API_KEY.
+	BootstrapAPIKey string
+
+	// BootstrapAPIKeyRole is the role assigned when BootstrapAPIKey is first
+	// inserted. Defaults to admin when BootstrapAPIKey is set.
+	// Env: AGENT_UI_BOOTSTRAP_API_KEY_ROLE.
+	BootstrapAPIKeyRole devuiauth.Role
 
 	// DefaultFlow is the flow name to auto-select in the Playground UI.
 	// When set, the UI opens with this flow pre-selected instead of "(none)".
@@ -171,6 +183,9 @@ func Start(ctx context.Context, opts ...Options) error {
 	}
 	if authStore != nil {
 		defer func() { _ = authStore.Close() }()
+	}
+	if err := ensureBootstrapAPIKey(ctx, authStore, o); err != nil {
+		return err
 	}
 
 	// Audit store
@@ -334,6 +349,10 @@ func mergeOptions(opts []Options) Options {
 			o.SkipBuiltinFlows = parseBoolStr(strings.TrimPrefix(arg, "--ui-skip-builtins="), o.SkipBuiltinFlows)
 		case arg == "--ui-skip-builtins":
 			o.SkipBuiltinFlows = true
+		case strings.HasPrefix(arg, "--ui-bootstrap-api-key="):
+			o.BootstrapAPIKey = strings.TrimSpace(strings.TrimPrefix(arg, "--ui-bootstrap-api-key="))
+		case strings.HasPrefix(arg, "--ui-bootstrap-api-key-role="):
+			o.BootstrapAPIKeyRole = devuiauth.Role(strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--ui-bootstrap-api-key-role="))))
 		}
 	}
 
@@ -366,8 +385,37 @@ func mergeOptions(opts []Options) Options {
 	if !o.RequireAPIKey && !o.AllowLocalNoAuth {
 		o.AllowLocalNoAuth = parseBoolEnv("AGENT_UI_ALLOW_LOCAL_NOAUTH", true)
 	}
+	if strings.TrimSpace(o.BootstrapAPIKey) == "" {
+		o.BootstrapAPIKey = strings.TrimSpace(os.Getenv("AGENT_UI_BOOTSTRAP_API_KEY"))
+	}
+	if o.BootstrapAPIKeyRole == "" {
+		o.BootstrapAPIKeyRole = devuiauth.Role(strings.ToLower(strings.TrimSpace(os.Getenv("AGENT_UI_BOOTSTRAP_API_KEY_ROLE"))))
+	}
+	if strings.TrimSpace(o.BootstrapAPIKey) != "" && o.BootstrapAPIKeyRole == "" {
+		o.BootstrapAPIKeyRole = devuiauth.RoleAdmin
+	}
 
 	return o
+}
+
+func ensureBootstrapAPIKey(ctx context.Context, store *authsqlite.Store, o Options) error {
+	secret := strings.TrimSpace(o.BootstrapAPIKey)
+	if secret == "" {
+		return nil
+	}
+	if store == nil {
+		return fmt.Errorf("bootstrap api key requested but auth store is unavailable")
+	}
+	role := o.BootstrapAPIKeyRole
+	if !role.Valid() {
+		return fmt.Errorf("bootstrap api key role %q is invalid", role)
+	}
+	key, err := store.EnsureKey(ctx, secret, role)
+	if err != nil {
+		return fmt.Errorf("bootstrap api key failed: %w", err)
+	}
+	log.Printf("🔐 Bootstrap API key ready (id=%s role=%s)", key.ID, key.Role)
+	return nil
 }
 
 func loadCustomToolSpecs(dir string) int {

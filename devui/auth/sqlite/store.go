@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,6 +71,41 @@ func (s *Store) CreateKey(ctx context.Context, role auth.Role) (auth.KeyWithSecr
 	}, nil
 }
 
+func (s *Store) EnsureKey(ctx context.Context, secret string, role auth.Role) (auth.APIKey, error) {
+	if strings.TrimSpace(secret) == "" {
+		return auth.APIKey{}, fmt.Errorf("api key is required")
+	}
+	if !role.Valid() {
+		return auth.APIKey{}, fmt.Errorf("invalid role %q", role)
+	}
+
+	keyHash := hashSecret(secret)
+	if existing, err := s.lookupByHash(ctx, keyHash); err == nil {
+		if existing.DisabledAt != nil {
+			return auth.APIKey{}, fmt.Errorf("api key is disabled")
+		}
+		return existing, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return auth.APIKey{}, fmt.Errorf("ensure key lookup: %w", err)
+	}
+
+	now := time.Now().UTC()
+	id := uuid.NewString()
+	const q = `INSERT INTO api_keys (id, key_hash, role, created_at) VALUES (?, ?, ?, ?);`
+	if _, err := s.db.ExecContext(ctx, q, id, keyHash, string(role), now.Format(time.RFC3339Nano)); err != nil {
+		existing, lookupErr := s.lookupByHash(ctx, keyHash)
+		if lookupErr == nil {
+			if existing.DisabledAt != nil {
+				return auth.APIKey{}, fmt.Errorf("api key is disabled")
+			}
+			return existing, nil
+		}
+		return auth.APIKey{}, fmt.Errorf("ensure key: %w", err)
+	}
+
+	return auth.APIKey{ID: id, Role: role, CreatedAt: now}, nil
+}
+
 func (s *Store) ListKeys(ctx context.Context) ([]auth.APIKey, error) {
 	const q = `
 SELECT id, role, created_at, rotated_at, disabled_at
@@ -127,6 +163,20 @@ func (s *Store) VerifyKey(ctx context.Context, secret string) (auth.APIKey, erro
 	if strings.TrimSpace(secret) == "" {
 		return auth.APIKey{}, fmt.Errorf("api key is required")
 	}
+	k, err := s.lookupByHash(ctx, hashSecret(secret))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return auth.APIKey{}, fmt.Errorf("invalid api key")
+		}
+		return auth.APIKey{}, fmt.Errorf("verify key: %w", err)
+	}
+	if k.DisabledAt != nil {
+		return auth.APIKey{}, fmt.Errorf("api key is disabled")
+	}
+	return k, nil
+}
+
+func (s *Store) lookupByHash(ctx context.Context, keyHash string) (auth.APIKey, error) {
 	const q = `
 SELECT id, role, created_at, rotated_at, disabled_at
 FROM api_keys
@@ -138,12 +188,9 @@ WHERE key_hash = ?;
 		rotatedRaw sql.NullString
 		disRaw     sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx, q, hashSecret(secret)).Scan(&k.ID, &k.Role, &createdRaw, &rotatedRaw, &disRaw)
+	err := s.db.QueryRowContext(ctx, q, keyHash).Scan(&k.ID, &k.Role, &createdRaw, &rotatedRaw, &disRaw)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return auth.APIKey{}, fmt.Errorf("invalid api key")
-		}
-		return auth.APIKey{}, fmt.Errorf("verify key: %w", err)
+		return auth.APIKey{}, err
 	}
 	k.CreatedAt = parseTime(createdRaw)
 	if rotatedRaw.Valid {
@@ -153,7 +200,6 @@ WHERE key_hash = ?;
 	if disRaw.Valid {
 		t := parseTime(disRaw.String)
 		k.DisabledAt = &t
-		return auth.APIKey{}, fmt.Errorf("api key is disabled")
 	}
 	return k, nil
 }
