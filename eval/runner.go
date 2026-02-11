@@ -34,6 +34,8 @@ type RunOptions struct {
 	Workers       int
 	Retries       int
 	RetryBackoff  time.Duration
+	CaseTimeout   time.Duration
+	Timeout       time.Duration
 	JudgeRubric   string
 	MinJudgeScore float64
 }
@@ -100,6 +102,13 @@ func (r *Runner) Run(ctx context.Context, cases []Case, opts RunOptions) (Report
 	if opts.MaxCases > 0 && opts.MaxCases < len(cases) {
 		cases = cases[:opts.MaxCases]
 	}
+	runCtx := ctx
+	cancel := func() {}
+	if opts.Timeout > 0 {
+		runCtx, cancel = context.WithTimeout(ctx, opts.Timeout)
+	}
+	defer cancel()
+
 	workers := opts.Workers
 	if workers <= 0 {
 		workers = defaultWorkers(len(cases))
@@ -136,15 +145,32 @@ func (r *Runner) Run(ctx context.Context, cases []Case, opts RunOptions) (Report
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				results[j.idx] = r.runCaseWithRetry(ctx, j.c, opts, retries, backoff)
+				results[j.idx] = r.runCaseWithRetry(runCtx, j.c, opts, retries, backoff)
 			}
 		}()
 	}
+	dispatched := 0
+dispatchLoop:
 	for idx, c := range cases {
-		jobs <- job{idx: idx, c: c}
+		select {
+		case <-runCtx.Done():
+			for i := idx; i < len(cases); i++ {
+				results[i] = contextFailureResult(cases[i], runCtx.Err(), 0)
+			}
+			break dispatchLoop
+		case jobs <- job{idx: idx, c: c}:
+			dispatched++
+		}
 	}
 	close(jobs)
 	wg.Wait()
+	if dispatched == 0 && len(cases) > 0 {
+		for i := range cases {
+			if results[i].CaseID == "" {
+				results[i] = contextFailureResult(cases[i], runCtx.Err(), 0)
+			}
+		}
+	}
 
 	latencies := make([]int64, 0, len(cases))
 	for _, res := range results {
@@ -204,25 +230,25 @@ func (r *Runner) Run(ctx context.Context, cases []Case, opts RunOptions) (Report
 }
 
 func (r *Runner) runCaseWithRetry(ctx context.Context, c Case, runOpts RunOptions, retries int, backoff time.Duration) CaseResult {
+	caseCtx := ctx
+	cancel := func() {}
+	if runOpts.CaseTimeout > 0 {
+		caseCtx, cancel = context.WithTimeout(ctx, runOpts.CaseTimeout)
+	}
+	defer cancel()
+
 	var last CaseResult
 	attempts := retries + 1
 	if attempts < 1 {
 		attempts = 1
 	}
 	for attempt := 1; attempt <= attempts; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return CaseResult{
-				CaseID:   c.ID,
-				Input:    c.Input,
-				Tags:     append([]string(nil), c.Tags...),
-				Pass:     false,
-				Error:    err.Error(),
-				Checks:   []CheckResult{{Name: "run", Pass: false, Detail: err.Error()}},
-				Attempts: attempt - 1,
-			}
+		if err := caseCtx.Err(); err != nil {
+			failed := contextFailureResult(c, err, attempt-1)
+			return failed
 		}
 
-		res := r.runCaseWithOptions(ctx, c, runOpts)
+		res := r.runCaseWithOptions(caseCtx, c, runOpts)
 		res.Attempts = attempt
 		last = res
 		if strings.TrimSpace(res.Error) == "" {
@@ -230,13 +256,30 @@ func (r *Runner) runCaseWithRetry(ctx context.Context, c Case, runOpts RunOption
 		}
 		if attempt < attempts {
 			select {
-			case <-ctx.Done():
+			case <-caseCtx.Done():
 				return last
 			case <-time.After(backoffForAttempt(backoff, attempt)):
 			}
 		}
 	}
 	return last
+}
+
+func contextFailureResult(c Case, err error, attempts int) CaseResult {
+	errText := "context canceled"
+	if err != nil {
+		errText = err.Error()
+	}
+	return CaseResult{
+		CaseID:   c.ID,
+		Input:    c.Input,
+		Tags:     append([]string(nil), c.Tags...),
+		Pass:     false,
+		Error:    errText,
+		Checks:   []CheckResult{{Name: "run", Pass: false, Detail: errText}},
+		Attempts: attempts,
+		Metadata: c.Metadata,
+	}
 }
 
 func (r *Runner) runCaseWithOptions(ctx context.Context, c Case, runOpts RunOptions) CaseResult {

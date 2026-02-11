@@ -21,6 +21,8 @@ type evalCLIOptions struct {
 	workers      int
 	retries      int
 	retryBackoff time.Duration
+	caseTimeout  time.Duration
+	timeout      time.Duration
 	judgeRubric  string
 	judgeMin     float64
 	judgeEnabled bool
@@ -30,7 +32,7 @@ type evalCLIOptions struct {
 func runEvalCLI(ctx context.Context, args []string) {
 	opts := parseEvalArgs(args)
 	if strings.TrimSpace(opts.dataset) == "" {
-		log.Fatal("usage: eval --dataset=path/to/file.jsonl [--output=markdown|json] [--fail-under=100] [--max-cases=50] [--workers=4] [--retries=1]")
+		log.Fatal("usage: eval --dataset=path/to/file.jsonl [--output=markdown|json] [--fail-under=100] [--max-cases=50] [--workers=4] [--retries=1] [--case-timeout-ms=45000] [--timeout-ms=300000]")
 	}
 
 	dataset, err := evalfw.LoadJSONL(opts.dataset)
@@ -68,6 +70,8 @@ func runEvalCLI(ctx context.Context, args []string) {
 		Workers:       opts.workers,
 		Retries:       opts.retries,
 		RetryBackoff:  opts.retryBackoff,
+		CaseTimeout:   opts.caseTimeout,
+		Timeout:       opts.timeout,
 		JudgeRubric:   opts.judgeRubric,
 		MinJudgeScore: opts.judgeMin,
 	})
@@ -133,6 +137,16 @@ func parseEvalArgs(args []string) evalCLIOptions {
 			raw := strings.TrimSpace(strings.TrimPrefix(arg, "--retry-backoff-ms="))
 			if v, err := strconv.Atoi(raw); err == nil && v > 0 {
 				opts.retryBackoff = time.Duration(v) * time.Millisecond
+			}
+		case strings.HasPrefix(arg, "--case-timeout-ms="):
+			raw := strings.TrimSpace(strings.TrimPrefix(arg, "--case-timeout-ms="))
+			if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+				opts.caseTimeout = time.Duration(v) * time.Millisecond
+			}
+		case strings.HasPrefix(arg, "--timeout-ms="):
+			raw := strings.TrimSpace(strings.TrimPrefix(arg, "--timeout-ms="))
+			if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+				opts.timeout = time.Duration(v) * time.Millisecond
 			}
 		case strings.HasPrefix(arg, "--judge-rubric="):
 			opts.judgeRubric = strings.TrimSpace(strings.TrimPrefix(arg, "--judge-rubric="))

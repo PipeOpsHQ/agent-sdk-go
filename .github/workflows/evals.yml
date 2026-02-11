@@ -51,6 +51,8 @@ jobs:
             --workers=4 \
             --retries=1 \
             --retry-backoff-ms=500 \
+            --case-timeout-ms=45000 \
+            --timeout-ms=300000 \
             --judge \
             --fail-under="${EVAL_FAIL_UNDER}" \
             --output=markdown

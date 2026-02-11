@@ -7,10 +7,11 @@
     <link rel="stylesheet" href="/styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div class="app-container">
+    <div class="app-container" x-data>
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-header">
@@ -154,16 +155,25 @@
         <div class="command-result" id="commandResult"></div>
 
         <!-- Live Tab -->
-        <section id="tab-live" class="tab active">
+        <section id="tab-live" class="tab active" x-data>
           <div class="page-header">
             <h1>Live Agent View</h1>
             <p class="page-subtitle">Observe cognition, execution, and intervention in real time.</p>
           </div>
 
           <div class="live-runs-strip" id="liveRunsStrip">
-            <div class="empty-state">
-              <p>No active entities</p>
-            </div>
+            <template x-if="!$store.live || !$store.live.liveRuns || $store.live.liveRuns.length === 0">
+              <div class="empty-state"><p>No active entities</p></div>
+            </template>
+            <template x-if="$store.live && $store.live.liveRuns && $store.live.liveRuns.length > 0">
+              <template x-for="run in $store.live.liveRuns" :key="run.id">
+                <button class="run-entity" :class="run.status" :title="'Open run ' + run.id" @click="window.openLiveRun(run.id)">
+                  <span class="run-entity-pulse"></span>
+                  <span class="run-entity-id" x-text="run.shortId"></span>
+                  <span class="run-entity-meta" x-text="run.provider"></span>
+                </button>
+              </template>
+            </template>
           </div>
 
           <div class="metrics-grid">
@@ -175,7 +185,7 @@
                 </svg>
               </div>
               <div class="metric-content">
-                <span class="metric-value" id="metric-completed">-</span>
+                <span class="metric-value" id="metric-completed" x-text="$store.live ? $store.live.metrics.completed : '-'">-</span>
                 <span class="metric-label">Completed Runs</span>
               </div>
             </div>
@@ -187,7 +197,7 @@
                 </svg>
               </div>
               <div class="metric-content">
-                <span class="metric-value" id="metric-running">-</span>
+                <span class="metric-value" id="metric-running" x-text="$store.live ? $store.live.metrics.running : '-'">-</span>
                 <span class="metric-label">Running</span>
               </div>
             </div>
@@ -199,7 +209,7 @@
                 </svg>
               </div>
               <div class="metric-content">
-                <span class="metric-value" id="metric-failed">-</span>
+                <span class="metric-value" id="metric-failed" x-text="$store.live ? $store.live.metrics.failed : '-'">-</span>
                 <span class="metric-label">Failed</span>
               </div>
             </div>
@@ -211,7 +221,7 @@
                 </svg>
               </div>
               <div class="metric-content">
-                <span class="metric-value" id="metric-tools">-</span>
+                <span class="metric-value" id="metric-tools" x-text="$store.live ? $store.live.metrics.tools : '-'">-</span>
                 <span class="metric-label">Active Tools</span>
               </div>
             </div>
@@ -227,9 +237,20 @@
                 </span>
               </div>
               <div class="activity-list" id="activityList">
-                <div class="empty-state">
-                  <p>No recent activity</p>
-                </div>
+                <template x-if="!$store.live || !$store.live.activity || $store.live.activity.length === 0">
+                  <div class="empty-state"><p>No recent activity</p></div>
+                </template>
+                <template x-if="$store.live && $store.live.activity && $store.live.activity.length > 0">
+                  <template x-for="item in $store.live.activity" :key="item.id">
+                    <div class="activity-item" :class="'activity-' + item.status">
+                      <div class="activity-dot" :class="item.status"></div>
+                      <div class="activity-content">
+                        <div class="activity-title" x-text="item.shortId"></div>
+                        <div class="activity-meta" x-text="item.meta"></div>
+                      </div>
+                    </div>
+                  </template>
+                </template>
               </div>
             </div>
 
@@ -241,17 +262,17 @@
                 <div class="status-item">
                   <span class="status-indicator online"></span>
                   <span class="status-name">LLM Provider</span>
-                  <span class="status-value" id="status-provider">-</span>
+                  <span class="status-value" id="status-provider" x-text="$store.live ? $store.live.status.provider : '-'">-</span>
                 </div>
                 <div class="status-item">
-                  <span class="status-indicator" id="status-queue-dot"></span>
+                  <span class="status-indicator" id="status-queue-dot" :class="$store.live && $store.live.status.queueOnline ? 'online' : 'offline'"></span>
                   <span class="status-name">Queue</span>
-                  <span class="status-value" id="status-queue">-</span>
+                  <span class="status-value" id="status-queue" x-text="$store.live ? $store.live.status.queue : '-'">-</span>
                 </div>
                 <div class="status-item">
-                  <span class="status-indicator" id="status-workers-dot"></span>
+                  <span class="status-indicator" id="status-workers-dot" :class="$store.live && $store.live.status.workersOnline ? 'online' : 'offline'"></span>
                   <span class="status-name">Workers</span>
-                  <span class="status-value" id="status-workers">-</span>
+                  <span class="status-value" id="status-workers" x-text="$store.live ? $store.live.status.workers : '-'">-</span>
                 </div>
                 <div class="status-item">
                   <span class="status-indicator online"></span>
@@ -1321,6 +1342,7 @@
       </main>
     </div>
 
-    <script src="/app.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+    <script defer src="/app.js"></script>
   </body>
 </html>

@@ -54,6 +54,60 @@ const HIDDEN_QUICK_CHAT_THREADS_KEY = 'quick_chat_hidden_threads';
 const QUICK_CHAT_THREAD_KEY = 'devui_quick_chat_thread';
 const AGENT_STUDIO_THREAD_KEY = 'devui_agent_studio_thread';
 
+function getLiveStore() {
+  if (!window.Alpine || typeof window.Alpine.store !== 'function') return null;
+  if (!window.Alpine.store('live')) {
+    window.Alpine.store('live', {
+      metrics: { completed: '-', running: '-', failed: '-', tools: '-' },
+      status: { provider: '-', queue: '-', queueOnline: false, workers: '-', workersOnline: false },
+      activity: [],
+      liveRuns: [],
+    });
+  }
+  return window.Alpine.store('live');
+}
+
+function setLiveSummaryReactive(payload) {
+  const store = getLiveStore();
+  if (!store || !payload) return;
+  store.metrics.completed = payload.completed;
+  store.metrics.running = payload.running;
+  store.metrics.failed = payload.failed;
+  store.metrics.tools = payload.tools;
+  store.status.provider = payload.provider;
+  store.status.queue = payload.queue;
+  store.status.queueOnline = !!payload.queueOnline;
+  store.status.workers = payload.workers;
+  store.status.workersOnline = !!payload.workersOnline;
+}
+
+function setLiveActivityReactive(rows) {
+  const store = getLiveStore();
+  if (!store) return;
+  const safeRows = Array.isArray(rows) ? rows : [];
+  store.activity = safeRows.map((run) => ({
+    id: runIdOf(run),
+    status: runStatusOf(run),
+    shortId: truncate(runIdOf(run), 24),
+    meta: `${run.provider || 'unknown'} • ${formatDate(run.updatedAt)}`,
+  }));
+  store.liveRuns = safeRows.slice(0, 8).map((run) => {
+    const runID = runIdOf(run);
+    return {
+      id: runID,
+      status: runStatusOf(run),
+      shortId: truncate(runID, 18),
+      provider: run.provider || 'unknown',
+    };
+  });
+}
+
+window.openLiveRun = function openLiveRun(runID) {
+  if (!runID) return;
+  switchTab('runs');
+  selectRun(runID);
+};
+
 const DEFAULT_WORKFLOW_SPEC = {
   start: 'prepare',
   nodes: [
@@ -503,9 +557,9 @@ async function loadDashboard() {
     document.getElementById('metric-failed').textContent = failed;
     document.getElementById('metric-tools').textContent = tools;
     const providerEl = document.getElementById('status-provider');
+    const runs = Array.isArray(recentRuns) ? recentRuns : [];
+    const provider = runs[0]?.provider || metrics.provider || metrics.primaryProvider || 'n/a';
     if (providerEl) {
-      const runs = Array.isArray(recentRuns) ? recentRuns : [];
-      const provider = runs[0]?.provider || metrics.provider || metrics.primaryProvider || 'n/a';
       providerEl.textContent = provider;
     }
 
@@ -535,6 +589,18 @@ async function loadDashboard() {
       document.getElementById('status-workers').textContent = 'None';
     }
 
+    setLiveSummaryReactive({
+      completed,
+      running,
+      failed,
+      tools,
+      provider,
+      queue: runtime.available ? `${runtime.queue?.pending || 0} pending` : 'Unavailable',
+      queueOnline: !!runtime.available,
+      workers: workerCount > 0 ? `${workerCount} active` : 'None',
+      workersOnline: workerCount > 0,
+    });
+
   } catch (e) {
     console.error('Dashboard load error:', e);
   }
@@ -544,17 +610,23 @@ async function loadRecentActivity() {
   const container = document.getElementById('activityList');
   const liveStrip = document.getElementById('liveRunsStrip');
   if (!container && !liveStrip) return;
+  const hasReactive = !!getLiveStore();
 
   try {
     const recentRuns = await api.get('/api/v1/runs?limit=12');
     const rows = Array.isArray(recentRuns) ? recentRuns : [];
+    if (hasReactive) {
+      setLiveActivityReactive(rows);
+    }
     if (!rows.length) {
-      if (container) container.innerHTML = '<div class="empty-state"><p>No recent activity</p></div>';
-      if (liveStrip) liveStrip.innerHTML = '<div class="empty-state"><p>No active entities</p></div>';
+      if (!hasReactive) {
+        if (container) container.innerHTML = '<div class="empty-state"><p>No recent activity</p></div>';
+        if (liveStrip) liveStrip.innerHTML = '<div class="empty-state"><p>No active entities</p></div>';
+      }
       return;
     }
 
-    if (container) {
+    if (!hasReactive && container) {
       container.innerHTML = rows.map(run => `
       <div class="activity-item activity-${runStatusOf(run)}">
         <div class="activity-dot ${runStatusOf(run)}"></div>
@@ -566,7 +638,7 @@ async function loadRecentActivity() {
     `).join('');
     }
 
-    if (liveStrip) {
+    if (!hasReactive && liveStrip) {
       liveStrip.innerHTML = rows.slice(0, 8).map(run => {
         const runID = runIdOf(run);
         const status = runStatusOf(run);
@@ -582,14 +654,17 @@ async function loadRecentActivity() {
         btn.addEventListener('click', () => {
           const runID = btn.getAttribute('data-live-run-id');
           if (!runID) return;
-          switchTab('runs');
-          selectRun(runID);
+          window.openLiveRun(runID);
         });
       });
     }
   } catch (e) {
-    if (container) container.innerHTML = '<div class="empty-state"><p>Failed to load activity</p></div>';
-    if (liveStrip) liveStrip.innerHTML = '<div class="empty-state"><p>Entity stream unavailable</p></div>';
+    if (hasReactive) {
+      setLiveActivityReactive([]);
+    } else {
+      if (container) container.innerHTML = '<div class="empty-state"><p>Failed to load activity</p></div>';
+      if (liveStrip) liveStrip.innerHTML = '<div class="empty-state"><p>Entity stream unavailable</p></div>';
+    }
   }
 }
 

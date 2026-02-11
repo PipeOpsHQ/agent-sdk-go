@@ -20,7 +20,7 @@ func printUsage() {
 	fmt.Println("  go run ./framework ui-admin create-key [--role=admin]")
 	fmt.Println("  go run ./framework cron list|add|remove|trigger|enable|disable|get")
 	fmt.Println("  go run ./framework skill list|install|remove|show|create")
-	fmt.Println("  go run ./framework eval --dataset=./evals/security.jsonl [--workers=4] [--retries=1] [--judge]")
+	fmt.Println("  go run ./framework eval --dataset=./evals/security.jsonl [--workers=4] [--retries=1] [--case-timeout-ms=45000] [--timeout-ms=300000] [--judge]")
 	fmt.Println()
 	fmt.Println("Agent Configuration:")
 	fmt.Println("  --system-prompt=TEXT          Custom system prompt (takes precedence over template)")

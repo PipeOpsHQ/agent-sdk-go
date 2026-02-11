@@ -132,6 +132,61 @@ func TestRunnerJudgeCheck(t *testing.T) {
 	}
 }
 
+func TestRunnerCaseTimeout(t *testing.T) {
+	t.Parallel()
+
+	agent := &fakeAgent{responses: map[string]fakeResult{
+		"slow": {delay: 200 * time.Millisecond, result: types.RunResult{Output: "late"}},
+	}}
+	runner, err := NewRunner(RunnerConfig{Agent: agent})
+	if err != nil {
+		t.Fatalf("NewRunner failed: %v", err)
+	}
+
+	report, err := runner.Run(context.Background(), []Case{{ID: "t1", Input: "slow"}}, RunOptions{
+		Workers:     1,
+		Retries:     0,
+		CaseTimeout: 40 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.Passed != 0 || report.Failed != 1 {
+		t.Fatalf("expected timeout failure, got %+v", report)
+	}
+	if report.Results[0].Error == "" {
+		t.Fatal("expected timeout error text")
+	}
+}
+
+func TestRunnerGlobalTimeout(t *testing.T) {
+	t.Parallel()
+
+	agent := &fakeAgent{responses: map[string]fakeResult{
+		"slow-1": {delay: 250 * time.Millisecond, result: types.RunResult{Output: "one"}},
+		"slow-2": {delay: 250 * time.Millisecond, result: types.RunResult{Output: "two"}},
+	}}
+	runner, err := NewRunner(RunnerConfig{Agent: agent})
+	if err != nil {
+		t.Fatalf("NewRunner failed: %v", err)
+	}
+
+	report, err := runner.Run(context.Background(), []Case{{ID: "g1", Input: "slow-1"}, {ID: "g2", Input: "slow-2"}}, RunOptions{
+		Workers: 1,
+		Retries: 0,
+		Timeout: 90 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.Total != 2 {
+		t.Fatalf("expected 2 results, got %d", report.Total)
+	}
+	if report.Passed != 0 {
+		t.Fatalf("expected all failures on global timeout, got %+v", report)
+	}
+}
+
 type fakeAgent struct {
 	mu        sync.Mutex
 	responses map[string]fakeResult
@@ -141,16 +196,24 @@ type fakeAgent struct {
 type fakeResult struct {
 	result types.RunResult
 	err    error
+	delay  time.Duration
 }
 
-func (f *fakeAgent) RunDetailed(_ context.Context, input string) (types.RunResult, error) {
+func (f *fakeAgent) RunDetailed(ctx context.Context, input string) (types.RunResult, error) {
 	f.mu.Lock()
 	if f.calls == nil {
 		f.calls = map[string]int{}
 	}
 	f.calls[input]++
-	f.mu.Unlock()
 	r := f.responses[input]
+	f.mu.Unlock()
+	if r.delay > 0 {
+		select {
+		case <-ctx.Done():
+			return types.RunResult{}, ctx.Err()
+		case <-time.After(r.delay):
+		}
+	}
 	return r.result, r.err
 }
 
