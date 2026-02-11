@@ -1,9 +1,6 @@
 run:
   timeout: 5m
-  go: "1.23"
-  skip-dirs:
-    - vendor
-    - .git
+  go: "1.24"
 
 linters:
   enable:
@@ -56,6 +53,9 @@ linters-settings:
     local-prefixes: github.com/PipeOpsHQ/agent-sdk-go
 
 issues:
+  exclude-dirs:
+    - vendor
+    - .git
   exclude-rules:
     - path: _test\.go
       linters:
@@ -73,4 +73,3 @@ issues:
 
   max-issues-per-linter: 50
   max-same-issues: 10
-
